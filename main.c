@@ -28,6 +28,7 @@
 #include <string.h>
 #include "kstring.h"
 #include "utils.h"
+#include <mpi.h>
 
 #ifndef PACKAGE_VERSION
 #define PACKAGE_VERSION "0.7.17-r1198-dirty"
@@ -86,6 +87,11 @@ static int usage()
 
 int main(int argc, char *argv[])
 {
+
+    MPI_Init(0, 0);
+    int size, rank;
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     //volatile int aa = 0;
     //fprintf(stderr, "aa %d\n", aa);
     //while(aa == 0) {
@@ -132,5 +138,6 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "\n[%s] Real time: %.3f sec; CPU: %.3f sec\n", __func__, realtime() - t_real, cputime());
 	}
 	free(bwa_pg);
+    MPI_Finalize();
 	return ret;
 }

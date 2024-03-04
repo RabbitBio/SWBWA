@@ -1,8 +1,8 @@
 CC=		 	mpicc
 #CC=			clang --analyze
-CFLAGS= -g -Wall -Wno-unused-function -O2
+CFLAGS= -g -Wall -Wno-unused-function -O2 -I ~/online/ylf/init_swlu/swlu/include
 #CFLAGS=		-g -Wall -Wno-unused-function
-WRAP_MALLOC=-DUSE_MALLOC_WRAPPERS
+#WRAP_MALLOC=-DUSE_MALLOC_WRAPPERS
 AR=			ar
 DFLAGS=		-DHAVE_PTHREAD $(WRAP_MALLOC)
 LOBJS=		utils.o kthread.o kstring.o ksw.o bwt.o bntseq.o bwa.o bwamem.o bwamem_pair.o bwamem_extra.o malloc_wrap.o \
@@ -13,7 +13,7 @@ AOBJS=		bwashm.o bwase.o bwaseqio.o bwtgap.o bwtaln.o bamlite.o \
 			bwtsw2_chain.o fastmap.o bwtsw2_pair.o
 PROG=		bwa
 INCLUDES=	
-LIBS=		-lm -lz -lpthread
+LIBS=	~/online/ylf/init_swlu/swlu/lib/libswlu_mpi.a	-lm -lz -lpthread 
 SUBDIRS=	.
 
 ifeq ($(shell uname -s),Linux)
@@ -23,12 +23,12 @@ endif
 .SUFFIXES:.c .o .cc
 
 .c.o:
-		$(CC) -mhost -c $(CFLAGS) $(DFLAGS) $(INCLUDES) $(CPPFLAGS) $< -o $@
+		$(CC) -c $(CFLAGS) $(DFLAGS) $(INCLUDES) $(CPPFLAGS) $< -o $@
 
 all:$(PROG)
 
 bwa:libbwa.a $(AOBJS) main.o
-		$(CC) -mdynamic $(CFLAGS) $(LDFLAGS) $(AOBJS) main.o -o $@ -L. -lbwa $(LIBS)
+		$(CC) $(CFLAGS) $(LDFLAGS) $(AOBJS) main.o -o $@ -L. -lbwa $(LIBS)
 
 bwamem-lite:libbwa.a example.o
 		$(CC) $(CFLAGS) $(LDFLAGS) example.o -o $@ -L. -lbwa $(LIBS)

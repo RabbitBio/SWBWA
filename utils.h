@@ -108,4 +108,12 @@ static inline uint64_t hash_64(uint64_t key)
 	return key;
 }
 
+#include <sys/time.h>
+inline double GetTime() {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (double) tv.tv_sec + (double) tv.tv_usec / 1000000;
+}
+#include "swlu.h"
+
 #endif

@@ -39,6 +39,10 @@
 #  include "malloc_wrap.h"
 #endif
 
+extern double t_extend;
+extern double t_bwt_sa;
+
+
 void bwt_gen_cnt_table(bwt_t *bwt)
 {
 	int i, j;
@@ -85,6 +89,7 @@ void bwt_cal_sa(bwt_t *bwt, int intv)
 
 bwtint_t bwt_sa(const bwt_t *bwt, bwtint_t k)
 {
+    //double t0 = GetTime();
 	bwtint_t sa = 0, mask = bwt->sa_intv - 1;
 	while (k & mask) {
 		++sa;
@@ -92,7 +97,9 @@ bwtint_t bwt_sa(const bwt_t *bwt, bwtint_t k)
 	}
 	/* without setting bwt->sa[0] = -1, the following line should be
 	   changed to (sa + bwt->sa[k/bwt->sa_intv]) % (bwt->seq_len + 1) */
-	return sa + bwt->sa[k/bwt->sa_intv];
+    bwtint_t res = sa + bwt->sa[k/bwt->sa_intv];
+    //t_bwt_sa += GetTime() - t0;
+	return res;
 }
 
 static inline int __occ_aux(uint64_t y, int c)
@@ -261,6 +268,7 @@ int bwt_match_exact_alt(const bwt_t *bwt, int len, const ubyte_t *str, bwtint_t 
 
 void bwt_extend(const bwt_t *bwt, const bwtintv_t *ik, bwtintv_t ok[4], int is_back)
 {
+    //double t0 = GetTime();
 	bwtint_t tk[4], tl[4];
 	int i;
 	bwt_2occ4(bwt, ik->x[!is_back] - 1, ik->x[!is_back] - 1 + ik->x[2], tk, tl);
@@ -272,6 +280,7 @@ void bwt_extend(const bwt_t *bwt, const bwtintv_t *ik, bwtintv_t ok[4], int is_b
 	ok[2].x[is_back] = ok[3].x[is_back] + ok[3].x[2];
 	ok[1].x[is_back] = ok[2].x[is_back] + ok[2].x[2];
 	ok[0].x[is_back] = ok[1].x[is_back] + ok[1].x[2];
+    //t_extend += GetTime() - t0;
 }
 
 static void bwt_reverse_intvs(bwtintv_v *p)

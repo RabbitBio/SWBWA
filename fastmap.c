@@ -42,10 +42,31 @@ KSEQ_DECLARE(gzFile)
 
 extern unsigned char nst_nt4_table[256];
 
+
+double t_tot = 0;
+double t_step1 = 0;
+double t_step2 = 0;
+double t_step3 = 0;
+
+double t_work1 = 0;
+double t_work2 = 0;
+
+double t_work2_1 = 0;
+double t_work2_2 = 0;
+double t_work2_3 = 0;
+
+double t_extend = 0;
+double t_bwt_sa = 0;
+
+long long s_reg_sum = 0;
+
 void *kopen(const char *fn, int *_fd);
 int kclose(void *a);
 //void kt_pipeline(int n_threads, void *(*func)(void*, int, void*), void *shared_data, int n_steps);
 void kt_pipeline_single(int n_threads, void *(*func)(void*, int, void*), void *shared_data, int n_steps);
+
+
+FILE *file_out_sam = NULL;
 
 typedef struct {
 	kseq_t *ks, *ks2;
@@ -68,12 +89,14 @@ static void *process(void *shared, int step, void *_data)
 	ktp_data_t *data = (ktp_data_t*)_data;
 	int i;
 	if (step == 0) {
+        double t0 = GetTime();
 		ktp_data_t *ret;
 		int64_t size = 0;
 		ret = calloc(1, sizeof(ktp_data_t));
 		ret->seqs = bseq_read(aux->actual_chunk_size, &ret->n_seqs, aux->ks, aux->ks2);
 		if (ret->seqs == 0) {
 			free(ret);
+            t_step1 += GetTime() - t0;
 			return 0;
 		}
 		if (!aux->copy_comment)
@@ -84,8 +107,10 @@ static void *process(void *shared, int step, void *_data)
 		for (i = 0; i < ret->n_seqs; ++i) size += ret->seqs[i].l_seq;
 		if (bwa_verbose >= 3)
 			fprintf(stderr, "[M::%s] read %d sequences (%ld bp)...\n", __func__, ret->n_seqs, (long)size);
+        t_step1 += GetTime() - t0;
 		return ret;
 	} else if (step == 1) {
+        double t0 = GetTime();
 		const mem_opt_t *opt = aux->opt;
 		const bwaidx_t *idx = aux->idx;
 		if (opt->flag & MEM_F_SMARTPE) {
@@ -110,14 +135,20 @@ static void *process(void *shared, int step, void *_data)
 			free(sep[0]); free(sep[1]);
 		} else mem_process_seqs(opt, idx->bwt, idx->bns, idx->pac, aux->n_processed, data->n_seqs, data->seqs, aux->pes0);
 		aux->n_processed += data->n_seqs;
+        t_step2 += GetTime() - t0;
 		return data;
 	} else if (step == 2) {
+        double t0 = GetTime();
 		for (i = 0; i < data->n_seqs; ++i) {
+            if(file_out_sam != NULL) {
+			    if (data->seqs[i].sam) err_fputs(data->seqs[i].sam, file_out_sam);
+            }
 			//if (data->seqs[i].sam) err_fputs(data->seqs[i].sam, stdout);
 			free(data->seqs[i].name); free(data->seqs[i].comment);
 			free(data->seqs[i].seq); free(data->seqs[i].qual); free(data->seqs[i].sam);
 		}
 		free(data->seqs); free(data);
+        t_step3 += GetTime() - t0;
 		return 0;
 	}
 	return 0;
@@ -187,7 +218,8 @@ int main_mem(int argc, char *argv[])
 		else if (c == 's') opt->split_width = atoi(optarg), opt0.split_width = 1;
 		else if (c == 'G') opt->max_chain_gap = atoi(optarg), opt0.max_chain_gap = 1;
 		else if (c == 'N') opt->max_chain_extend = atoi(optarg), opt0.max_chain_extend = 1;
-		else if (c == 'o' || c == 'f') xreopen(optarg, "wb", stdout);
+		else if (c == 'o' || c == 'f') file_out_sam = fopen(optarg, "wb");
+        //xreopen(optarg, "wb", stdout);
 		else if (c == 'W') opt->min_chain_weight = atoi(optarg), opt0.min_chain_weight = 1;
 		else if (c == 'y') opt->max_mem_intv = atol(optarg), opt0.max_mem_intv = 1;
 		else if (c == 'C') aux.copy_comment = 1;
@@ -394,7 +426,25 @@ int main_mem(int argc, char *argv[])
 	//bwa_print_sam_hdr(aux.idx->bns, hdr_line);
 	aux.actual_chunk_size = fixed_chunk_size > 0? fixed_chunk_size : opt->chunk_size * opt->n_threads;
 	//kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
+    double t0 = GetTime();
+
+    swlu_debug_init();
+    swlu_prof_init();
+    //swlu_prof_start();
+
 	kt_pipeline_single(1, process, &aux, 3);
+
+    //swlu_prof_stop();
+    swlu_prof_print();
+
+    t_tot += GetTime() - t0;
+
+
+    fprintf(stderr, "[timer] tot : %lf, step1 : %lf, step2 : %lf, step3 : %lf\n", t_tot, t_step1, t_step2, t_step3);
+    fprintf(stderr, "[timer] step2 --- work1 : %lf (extend : %lf, sa : %lf), work2 : %lf (1 : %lf, 2 : %lf, 3 : %lf)\n", 
+            t_work1, t_extend, t_bwt_sa, t_work2, t_work2_1, t_work2_2, t_work2_3);
+    fprintf(stderr, "[info] sum : %lld\n", s_reg_sum);
+
 	free(hdr_line);
 	free(opt);
 	bwa_idx_destroy(aux.idx);
@@ -404,6 +454,7 @@ int main_mem(int argc, char *argv[])
 		kseq_destroy(aux.ks2);
 		err_gzclose(fp2); kclose(ko2);
 	}
+    if(file_out_sam != NULL) fclose(file_out_sam);
 	return 0;
 }
 

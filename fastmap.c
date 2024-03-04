@@ -51,6 +51,12 @@ double t_step3 = 0;
 double t_work1 = 0;
 double t_work2 = 0;
 
+double t_work1_1 = 0;
+double t_work1_2 = 0;
+double t_work1_3 = 0;
+
+double t_work1_3_1 = 0;
+
 double t_work2_1 = 0;
 double t_work2_2 = 0;
 double t_work2_3 = 0;
@@ -59,6 +65,8 @@ double t_extend = 0;
 double t_bwt_sa = 0;
 
 long long s_reg_sum = 0;
+long long c_px2 = 0;
+long long s_px2 = 0;
 
 void *kopen(const char *fn, int *_fd);
 int kclose(void *a);
@@ -428,22 +436,30 @@ int main_mem(int argc, char *argv[])
 	//kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
     double t0 = GetTime();
 
+
+#ifdef use_swlu
     swlu_debug_init();
     swlu_prof_init();
     //swlu_prof_start();
+#endif	
+    
+    kt_pipeline_single(1, process, &aux, 3);
 
-	kt_pipeline_single(1, process, &aux, 3);
-
+#ifdef use_swlu
     //swlu_prof_stop();
     swlu_prof_print();
+#endif	
 
     t_tot += GetTime() - t0;
 
 
     fprintf(stderr, "[timer] tot : %lf, step1 : %lf, step2 : %lf, step3 : %lf\n", t_tot, t_step1, t_step2, t_step3);
-    fprintf(stderr, "[timer] step2 --- work1 : %lf (extend : %lf, sa : %lf), work2 : %lf (1 : %lf, 2 : %lf, 3 : %lf)\n", 
-            t_work1, t_extend, t_bwt_sa, t_work2, t_work2_1, t_work2_2, t_work2_3);
+    fprintf(stderr, "[timer] step2 --- work1 : %lf (1 : %lf, 2 : %lf, 3 : %lf [%lf]), work2 : %lf (1 : %lf, 2 : %lf, 3 : %lf)\n", 
+            t_work1, t_work1_1, t_work1_2, t_work1_3, t_work1_3_1, t_work2, t_work2_1, t_work2_2, t_work2_3);
+    long long s_reg_sum2 = 0;
     fprintf(stderr, "[info] sum : %lld\n", s_reg_sum);
+    fprintf(stderr, "[info] avg  %lld \  %lld\n", s_px2, c_px2);
+
 
 	free(hdr_line);
 	free(opt);

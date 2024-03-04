@@ -39,11 +39,11 @@
 #  include "malloc_wrap.h"
 #endif
 
-//extern double t_extend;
-//extern double t_bwt_sa;
+extern double t_extend;
+extern double t_bwt_sa;
 
-//extern double t_work1_1;
-//extern double t_work1_2;
+extern double t_work1_1;
+extern double t_work1_2;
 
 
 void bwt_gen_cnt_table(bwt_t *bwt)
@@ -92,7 +92,6 @@ void bwt_cal_sa(bwt_t *bwt, int intv)
 
 bwtint_t bwt_sa(const bwt_t *bwt, bwtint_t k)
 {
-    //double t0 = GetTime();
 	bwtint_t sa = 0, mask = bwt->sa_intv - 1;
 	while (k & mask) {
 		++sa;
@@ -101,7 +100,6 @@ bwtint_t bwt_sa(const bwt_t *bwt, bwtint_t k)
 	/* without setting bwt->sa[0] = -1, the following line should be
 	   changed to (sa + bwt->sa[k/bwt->sa_intv]) % (bwt->seq_len + 1) */
     bwtint_t res = sa + bwt->sa[k/bwt->sa_intv];
-    //t_bwt_sa += GetTime() - t0;
 	return res;
 }
 
@@ -271,7 +269,6 @@ int bwt_match_exact_alt(const bwt_t *bwt, int len, const ubyte_t *str, bwtint_t 
 
 void bwt_extend(const bwt_t *bwt, const bwtintv_t *ik, bwtintv_t ok[4], int is_back)
 {
-    //double t0 = GetTime();
 	bwtint_t tk[4], tl[4];
 	int i;
 	bwt_2occ4(bwt, ik->x[!is_back] - 1, ik->x[!is_back] - 1 + ik->x[2], tk, tl);
@@ -283,7 +280,6 @@ void bwt_extend(const bwt_t *bwt, const bwtintv_t *ik, bwtintv_t ok[4], int is_b
 	ok[2].x[is_back] = ok[3].x[is_back] + ok[3].x[2];
 	ok[1].x[is_back] = ok[2].x[is_back] + ok[2].x[2];
 	ok[0].x[is_back] = ok[1].x[is_back] + ok[1].x[2];
-    //t_extend += GetTime() - t0;
 }
 
 static void bwt_reverse_intvs(bwtintv_v *p)
@@ -313,9 +309,8 @@ int bwt_smem1a(const bwt_t *bwt, int len, const uint8_t *q, int x, int min_intv,
 	bwt_set_intv(bwt, q[x], ik); // the initial interval of a single base
 	ik.info = x + 1;
     
-    //double t0;
+    double t0;
 
-    //t0 = GetTime();
 	for (i = x + 1, curr->n = 0; i < len; ++i) { // forward search
 		if (ik.x[2] < max_intv) { // an interval small enough
 			kv_push(bwtintv_t, *curr, ik);
@@ -337,9 +332,7 @@ int bwt_smem1a(const bwt_t *bwt, int len, const uint8_t *q, int x, int min_intv,
 	bwt_reverse_intvs(curr); // s.t. smaller intervals (i.e. longer matches) visited first
 	ret = curr->a[0].info; // this will be the returned value
 	swap = curr; curr = prev; prev = swap;
-    //t_work1_1 += GetTime() - t0;
 
-    //t0 = GetTime();
 	for (i = x - 1; i >= -1; --i) { // backward search for MEMs
 		c = i < 0? -1 : q[i] < 4? q[i] : -1; // c==-1 if i<0 or q[i] is an ambiguous base
 		for (j = 0, curr->n = 0; j < prev->n; ++j) {
@@ -360,7 +353,6 @@ int bwt_smem1a(const bwt_t *bwt, int len, const uint8_t *q, int x, int min_intv,
 		if (curr->n == 0) break;
 		swap = curr; curr = prev; prev = swap;
 	}
-    //t_work1_2 += GetTime() - t0;
 	bwt_reverse_intvs(mem); // s.t. sorted by the start coordinate
 
 	if (tmpvec == 0 || tmpvec[0] == 0) free(a[0].a);

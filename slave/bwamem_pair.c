@@ -100,8 +100,8 @@ void mem_pestat(const mem_opt_t *opt, int64_t l_pac, int n, const mem_alnreg_v *
 			continue;
 		} else {
             //fprintf(stderr, "[M::%s] analyzing insert size distribution for orientation %c%c...\n", __func__, "FR"[d>>1&1], "FR"[d&1]);
-		}
-        ks_introsort_64(q->n, q->a);
+        }
+		ks_introsort_64(q->n, q->a);
 		p25 = q->a[(int)(.25 * q->n + .499)];
 		p50 = q->a[(int)(.50 * q->n + .499)];
 		p75 = q->a[(int)(.75 * q->n + .499)];

@@ -123,6 +123,7 @@ typedef struct { // This struct is only used for the convenience of API.
     uint32_t mapq;
     uint32_t NM;
 
+
 	int n_cigar;     // number of CIGAR operations
 	uint32_t *cigar; // CIGAR in the BAM encoding: opLen<<4|op; op to integer mapping: MIDSH=>01234
 	char *XA;        // alternative mappings
@@ -134,6 +135,7 @@ typedef struct { // This struct is only used for the convenience of API.
 extern "C" {
 #endif
 
+    void worker1(void *data, int i, int tid);
 	smem_i *smem_itr_init(const bwt_t *bwt);
 	void smem_itr_destroy(smem_i *itr);
 	void smem_set_query(smem_i *itr, int len, const uint8_t *query);

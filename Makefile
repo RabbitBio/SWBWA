@@ -5,6 +5,7 @@ CFLAGS= -g -Wall -Wno-unused-function -O2 -I ~/online/ylf/init_swlu/swlu/include
 #WRAP_MALLOC=-DUSE_MALLOC_WRAPPERS
 AR=			ar
 DFLAGS=		-DHAVE_PTHREAD $(WRAP_MALLOC)
+
 LOBJS=		utils.o kthread.o kstring.o ksw.o bwt.o bntseq.o bwa.o bwamem.o bwamem_pair.o bwamem_extra.o malloc_wrap.o \
 			QSufSort.o bwt_gen.o rope.o rle.o is.o bwtindex.o
 AOBJS=		bwashm.o bwase.o bwaseqio.o bwtgap.o bwtaln.o bamlite.o \
@@ -13,8 +14,13 @@ AOBJS=		bwashm.o bwase.o bwaseqio.o bwtgap.o bwtaln.o bamlite.o \
 			bwtsw2_chain.o fastmap.o bwtsw2_pair.o
 PROG=		bwa
 INCLUDES=	
-LIBS=	~/online/ylf/init_swlu/swlu/lib/libswlu_mpi.a	-lm -lz -lpthread 
+LIBS=	~/online/ylf/init_swlu/swlu/lib/libswlu_mpi.a	-lm -lz -lpthread -lm_slave
 SUBDIRS=	.
+
+
+SLAVE_DIR = slave
+SLAVE_SOURCES = $(wildcard $(SLAVE_DIR)/*.c)
+SLAVE_OBJECTS = $(SLAVE_SOURCES:.c=.o)
 
 ifeq ($(shell uname -s),Linux)
 	LIBS += -lrt
@@ -23,12 +29,16 @@ endif
 .SUFFIXES:.c .o .cc
 
 .c.o:
-		$(CC) -c $(CFLAGS) $(DFLAGS) $(INCLUDES) $(CPPFLAGS) $< -o $@
+		$(CC) -mhost -c $(CFLAGS) $(DFLAGS) $(INCLUDES) $(CPPFLAGS) $< -o $@
+
+$(SLAVE_DIR)/%.o: $(SLAVE_DIR)/%.c
+		$(CC) -mslave -c $(CFLAGS) $< -o $@
+
 
 all:$(PROG)
 
-bwa:libbwa.a $(AOBJS) main.o
-		$(CC) $(CFLAGS) $(LDFLAGS) $(AOBJS) main.o -o $@ -L. -lbwa $(LIBS)
+bwa:libbwa.a $(AOBJS) main.o $(SLAVE_OBJECTS)
+		$(CC) $(CFLAGS) $(LDFLAGS) $(AOBJS) main.o $(SLAVE_OBJECTS) -o $@ -L. -lbwa $(LIBS)
 
 bwamem-lite:libbwa.a example.o
 		$(CC) $(CFLAGS) $(LDFLAGS) example.o -o $@ -L. -lbwa $(LIBS)
@@ -37,7 +47,7 @@ libbwa.a:$(LOBJS)
 		$(AR) -csru $@ $(LOBJS)
 
 clean:
-		rm -f gmon.out *.o a.out $(PROG) *~ *.a
+		rm -f gmon.out *.o a.out $(PROG) *~ *.a slave/*.o
 
 depend:
 	( LC_ALL=C ; export LC_ALL; makedepend -Y -- $(CFLAGS) $(DFLAGS) $(CPPFLAGS) -- *.c )

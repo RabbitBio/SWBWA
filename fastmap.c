@@ -44,7 +44,8 @@ extern unsigned char nst_nt4_table[256];
 
 void *kopen(const char *fn, int *_fd);
 int kclose(void *a);
-void kt_pipeline(int n_threads, void *(*func)(void*, int, void*), void *shared_data, int n_steps);
+//void kt_pipeline(int n_threads, void *(*func)(void*, int, void*), void *shared_data, int n_steps);
+void kt_pipeline_single(int n_threads, void *(*func)(void*, int, void*), void *shared_data, int n_steps);
 
 typedef struct {
 	kseq_t *ks, *ks2;
@@ -112,7 +113,7 @@ static void *process(void *shared, int step, void *_data)
 		return data;
 	} else if (step == 2) {
 		for (i = 0; i < data->n_seqs; ++i) {
-			if (data->seqs[i].sam) err_fputs(data->seqs[i].sam, stdout);
+			//if (data->seqs[i].sam) err_fputs(data->seqs[i].sam, stdout);
 			free(data->seqs[i].name); free(data->seqs[i].comment);
 			free(data->seqs[i].seq); free(data->seqs[i].qual); free(data->seqs[i].sam);
 		}
@@ -390,9 +391,10 @@ int main_mem(int argc, char *argv[])
 			opt->flag |= MEM_F_PE;
 		}
 	}
-	bwa_print_sam_hdr(aux.idx->bns, hdr_line);
+	//bwa_print_sam_hdr(aux.idx->bns, hdr_line);
 	aux.actual_chunk_size = fixed_chunk_size > 0? fixed_chunk_size : opt->chunk_size * opt->n_threads;
-	kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
+	//kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
+	kt_pipeline_single(1, process, &aux, 3);
 	free(hdr_line);
 	free(opt);
 	bwa_idx_destroy(aux.idx);

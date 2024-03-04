@@ -86,6 +86,12 @@ static int usage()
 
 int main(int argc, char *argv[])
 {
+    //volatile int aa = 0;
+    //fprintf(stderr, "aa %d\n", aa);
+    //while(aa == 0) {
+    //    
+    //}
+    //fprintf(stderr, "aa %d\n", aa);
 	extern char *bwa_pg;
 	int i, ret;
 	double t_real;

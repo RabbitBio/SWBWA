@@ -1262,7 +1262,73 @@ typedef struct {
 	int64_t n_processed;
 } worker_t;
 
+
+void worker1_pre(void *data, int i, int tid, int* real_sizes)
+{
+	worker_t *w = (worker_t*)data;
+	if (!(w->opt->flag&MEM_F_PE)) {
+        mem_alnreg_v reg; 
+		if(bwa_verbose >= 4) printf("=====> Processing read '%s' <=====\n", w->seqs[i].name);
+		reg = mem_align1_core(i, w->opt, w->bwt, w->bns, w->pac, w->seqs[i].l_seq, w->seqs[i].seq, w->aux[tid]);
+        real_sizes[i] = reg.n;
+        free(reg.a);
+	} else {
+        mem_alnreg_v reg; 
+		if (bwa_verbose >= 4) printf("=====> Processing read '%s'/1 <=====\n", w->seqs[i<<1|0].name);
+		reg = mem_align1_core(i * 2, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|0].l_seq, w->seqs[i<<1|0].seq, w->aux[tid]);
+        real_sizes[i<<1|0] = reg.n;
+        free(reg.a);
+
+		if (bwa_verbose >= 4) printf("=====> Processing read '%s'/2 <=====\n", w->seqs[i<<1|1].name);
+        reg = mem_align1_core(i * 2 + 1, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|1].l_seq, w->seqs[i<<1|1].seq, w->aux[tid]);
+        real_sizes[i<<1|1] = reg.n;
+        free(reg.a);
+	}
+}
+
 void worker1(void *data, int i, int tid)
+{
+	worker_t *w = (worker_t*)data;
+	if (!(w->opt->flag&MEM_F_PE)) {
+        mem_alnreg_v reg; 
+		if (bwa_verbose >= 4) printf("=====> Processing read '%s' <=====\n", w->seqs[i].name);
+		reg = mem_align1_core(i, w->opt, w->bwt, w->bns, w->pac, w->seqs[i].l_seq, w->seqs[i].seq, w->aux[tid]);
+        if(reg.n > w->regs[i].m) {
+            fprintf(stderr, "size GG %d > %d\n", reg.n, w->regs[i].m);
+            exit(0);
+        } else {
+            w->regs[i].n = reg.n;
+            for(int j = 0; j < reg.n; j++) w->regs[i].a[j] = reg.a[j];
+        }
+        free(reg.a);
+	} else {
+        mem_alnreg_v reg; 
+
+		if (bwa_verbose >= 4) printf("=====> Processing read '%s'/1 <=====\n", w->seqs[i<<1|0].name);
+		reg = mem_align1_core(i * 2, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|0].l_seq, w->seqs[i<<1|0].seq, w->aux[tid]);
+        if(reg.n > w->regs[i<<1|0].m) {
+            fprintf(stderr, "size GG %d > %d\n", reg.n, w->regs[i<<1|0].m);
+            exit(0);
+        } else {
+            w->regs[i<<1|0].n = reg.n;
+            for(int j = 0; j < reg.n; j++) w->regs[i<<1|0].a[j] = reg.a[j];
+        }
+        free(reg.a);
+
+		if (bwa_verbose >= 4) printf("=====> Processing read '%s'/2 <=====\n", w->seqs[i<<1|1].name);
+        reg = mem_align1_core(i * 2 + 1, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|1].l_seq, w->seqs[i<<1|1].seq, w->aux[tid]);
+        if(reg.n > w->regs[i<<1|1].m) {
+            fprintf(stderr, "size GG %d > %d\n", reg.n, w->regs[i<<1|1].m);
+            exit(0);
+        } else {
+            w->regs[i<<1|1].n = reg.n;
+            for(int j = 0; j < reg.n; j++) w->regs[i<<1|1].a[j] = reg.a[j];
+        }
+        free(reg.a);
+	}
+}
+
+void init_worker1(void *data, int i, int tid)
 {
 	worker_t *w = (worker_t*)data;
 	if (!(w->opt->flag&MEM_F_PE)) {
@@ -1274,15 +1340,6 @@ void worker1(void *data, int i, int tid)
 		if (bwa_verbose >= 4) printf("=====> Processing read '%s'/1 <=====\n", w->seqs[i<<1|0].name);
 		reg = mem_align1_core(i * 2, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|0].l_seq, w->seqs[i<<1|0].seq, w->aux[tid]);
 
-        //char filename[50];
-        //sprintf(filename, "%d_info.log", i * 2);
-        //FILE *file1 = fopen(filename, "w");
-        //fprintf(file1, "reg size %d\n", reg.n);
-        //for(int j = 0; j < reg.n; j++) {
-        //    fprintf(file1, "%lld %lld\n", reg.a[j].rb, reg.a[j].re);
-        //}
-        //fclose(file1);
-
         if(reg.n > w->regs[i<<1|0].m) {
             fprintf(stderr, "size GG %d > %d\n", reg.n, w->regs[i<<1|0].m);
         }
@@ -1293,14 +1350,6 @@ void worker1(void *data, int i, int tid)
 
 		if (bwa_verbose >= 4) printf("=====> Processing read '%s'/2 <=====\n", w->seqs[i<<1|1].name);
         reg = mem_align1_core(i * 2 + 1, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|1].l_seq, w->seqs[i<<1|1].seq, w->aux[tid]);
-
-        //sprintf(filename, "%d_info.log", i * 2 + 1);
-        //file1 = fopen(filename, "w");
-        //fprintf(file1, "reg size %d\n", reg.n);
-        //for(int j = 0; j < reg.n; j++) {
-        //    fprintf(file1, "%lld %lld\n", reg.a[j].rb, reg.a[j].re);
-        //}
-        //fclose(file1);
 
         if(reg.n > w->regs[i<<1|1].m) {
             fprintf(stderr, "size GG %d > %d\n", reg.n, w->regs[i<<1|1].m);

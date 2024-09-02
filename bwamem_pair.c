@@ -242,8 +242,12 @@ int mem_pair(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, cons
 				//printf("%d: %lld\n", k, dist);
 				if (dist > pes[dir].high) break;
 				if (dist < pes[dir].low)  continue;
-				ns = (dist - pes[dir].avg) / pes[dir].std;
-				q = (int)((v.a[i].y>>32) + (v.a[k].y>>32) + .721 * log(2. * erfc(fabs(ns) * M_SQRT1_2)) * opt->a + .499); // .721 = 1/log(4)
+                if(fabs(pes[dir].std) < 1e-6) {
+                    q = 0;
+                } else {
+                    ns = (dist - pes[dir].avg) / pes[dir].std;
+                    q = (int)((v.a[i].y>>32) + (v.a[k].y>>32) + .721 * log(2. * erfc(fabs(ns) * M_SQRT1_2)) * opt->a + .499); // .721 = 1/log(4)
+                }
 				if (q < 0) q = 0;
 				p = kv_pushp(pair64_t, u);
 				p->y = (uint64_t)k<<32 | i;

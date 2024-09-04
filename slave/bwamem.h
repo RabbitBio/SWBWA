@@ -135,7 +135,9 @@ typedef struct { // This struct is only used for the convenience of API.
 extern "C" {
 #endif
 
+    void worker1_pre(void *data, int i, int tid, int* real_size);
     void worker1(void *data, int i, int tid);
+    void worker2(void *data, int i, int tid);
 	smem_i *smem_itr_init(const bwt_t *bwt);
 	void smem_itr_destroy(smem_i *itr);
 	void smem_set_query(smem_i *itr, int len, const uint8_t *query);

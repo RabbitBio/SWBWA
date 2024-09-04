@@ -88,15 +88,22 @@ extern long long s_px2;
 
 
 #define bwt_sa_slave
-//extern void SLAVE_FUN(bwt_sa_s());
+#define bwt_sa_slave2
 extern void SLAVE_FUN(worker1_s());
 extern void SLAVE_FUN(worker1_s_pre());
+extern void SLAVE_FUN(worker2_s());
+
 
 typedef struct{
     long nn;
     void* data;
     int* real_sizes;
 } Para_worker1_s;
+
+typedef struct{
+    long nn;
+    void* data;
+} Para_worker2_s;
 
 
 typedef struct{
@@ -1265,22 +1272,20 @@ static void worker1(void *data, int i, int tid)
 
 static void worker2(void *data, int i, int tid)
 {
-	extern int mem_sam_pe(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, const mem_pestat_t pes[4], uint64_t id, bseq1_t s[2], mem_alnreg_v a[2]);
-	extern void mem_reg2ovlp(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, bseq1_t *s, mem_alnreg_v *a);
-	worker_t *w = (worker_t*)data;
-	if (!(w->opt->flag&MEM_F_PE)) {
-		if (bwa_verbose >= 4) printf("=====> Finalizing read '%s' <=====\n", w->seqs[i].name);
-		mem_mark_primary_se(w->opt, w->regs[i].n, w->regs[i].a, w->n_processed + i);
-		if (w->opt->flag & MEM_F_PRIMARY5) mem_reorder_primary5(w->opt->T, &w->regs[i]);
-		mem_reg2sam(w->opt, w->bns, w->pac, &w->seqs[i], &w->regs[i], 0, 0);
-		free(w->regs[i].a);
-	} else {
-		if (bwa_verbose >= 4) printf("=====> Finalizing read pair '%s' <=====\n", w->seqs[i<<1|0].name);
-        mem_alnreg_v a = w->regs[i<<1];
-        if(a.n > 0) s_reg_sum += a.n + a.a[0].rid;
-		mem_sam_pe(w->opt, w->bns, w->pac, w->pes, (w->n_processed>>1) + i, &w->seqs[i<<1], &w->regs[i<<1]);
-		free(w->regs[i<<1|0].a); free(w->regs[i<<1|1].a);
-	}
+    extern int mem_sam_pe(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, const mem_pestat_t pes[4], uint64_t id, bseq1_t s[2], mem_alnreg_v a[2]);
+    extern void mem_reg2ovlp(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, bseq1_t *s, mem_alnreg_v *a);
+    worker_t *w = (worker_t*)data;
+    if (!(w->opt->flag&MEM_F_PE)) {
+        if (bwa_verbose >= 4) printf("=====> Finalizing read '%s' <=====\n", w->seqs[i].name);
+        mem_mark_primary_se(w->opt, w->regs[i].n, w->regs[i].a, w->n_processed + i);
+        if (w->opt->flag & MEM_F_PRIMARY5) mem_reorder_primary5(w->opt->T, &w->regs[i]);
+        mem_reg2sam(w->opt, w->bns, w->pac, &w->seqs[i], &w->regs[i], 0, 0);
+        free(w->regs[i].a);
+    } else {
+        if (bwa_verbose >= 4) printf("=====> Finalizing read pair '%s' <=====\n", w->seqs[i<<1|0].name);
+        mem_sam_pe(w->opt, w->bns, w->pac, w->pes, (w->n_processed>>1) + i, &w->seqs[i<<1], &w->regs[i<<1]);
+        free(w->regs[i<<1|0].a); free(w->regs[i<<1|1].a);
+    }
 }
 
 void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bns, const uint8_t *pac, int64_t n_processed, int n, bseq1_t *seqs, const mem_pestat_t *pes0)
@@ -1290,8 +1295,6 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 	worker_t w;
 	mem_pestat_t pes[4];
 	double ctime, rtime;
-	int i;
-
 	ctime = cputime(); rtime = realtime();
 	global_bns = bns;
 	w.regs = malloc(n * sizeof(mem_alnreg_v));
@@ -1299,10 +1302,11 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 	w.seqs = seqs; w.n_processed = n_processed;
 	w.pes = &pes[0];
 	w.aux = malloc(64 * sizeof(smem_aux_t));
-	for (i = 0; i < 64; ++i) {
+	for (int i = 0; i < 64; ++i) {
 		//w.aux[i] = smem_aux_init();
 		w.aux[i] = 0;
     }
+
 
     long nn = (opt->flag&MEM_F_PE)? n>>1 : n;
     double t0 = GetTime();
@@ -1319,7 +1323,7 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
     athread_join();
       
     fprintf(stderr, "slave pre done\n");
-    for(long i = 0; i < n; i++) {
+    for(int i = 0; i < n; i++) {
         w.regs[i].m = para.real_sizes[i];
         w.regs[i].a = malloc(sizeof(mem_alnreg_t) * w.regs[i].m);
         if(w.regs[i].a == NULL) {
@@ -1328,8 +1332,6 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
         }
         w.regs[i].n = 0;
     }
-
- 
 
     __real_athread_spawn((void*)slave_worker1_s, &para, 1);
     athread_join();
@@ -1340,33 +1342,53 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 
     free(para.real_sizes);
 
-
 #else
-    for(long ii = 0; ii < nn; ii++) {
-        worker1(&w, ii, ii % 64);
+    for(int i = 0; i < nn; i++) {
+        worker1(&w, i, i % 64);
     }
 #endif
 
-    t_work1 += GetTime() - t0;
-
-	//for (i = 0; i < 64; ++i)
+	//for (int i = 0; i < 64; ++i)
 	//	smem_aux_destroy(w.aux[i]);
 	free(w.aux);
 	if (opt->flag&MEM_F_PE) { // infer insert sizes if not provided
 		if (pes0) memcpy(pes, pes0, 4 * sizeof(mem_pestat_t));
 		else mem_pestat(opt, bns->l_pac, n, w.regs, pes);
 	}
+    t_work1 += GetTime() - t0;
 
     t0 = GetTime();
+#ifdef bwt_sa_slave2
+    athread_init();
 
-#ifdef use_swlu
-    swlu_prof_start();
+    Para_worker2_s para2;
+    para2.nn = nn;
+    para2.data = (void*)&w;
+
+    for(int i = 0; i < n; i++) {
+        //fprintf(stderr, "qual %s\n", w.seqs[i].qual);
+        w.seqs[i].sam = malloc((w.seqs[i].l_seq << 6) * sizeof(char) + 1);
+        memset(w.seqs[i].sam, 'A', (w.seqs[i].l_seq << 6) * sizeof(char));
+        w.seqs[i].sam[(w.seqs[i].l_seq << 6)] = '\0';
+        //fprintf(stderr, "sam size %d %d\n", i, strlen(w.seqs[i].sam));
+    }
+
+    __real_athread_spawn((void*)slave_worker2_s, &para2, 1);
+    athread_join();
+
+    athread_halt();
+
+    for(int i = 0; i < n; i++) {
+        free(w.regs[i].a);
+    }
+#else
+    for(int i = 0; i < nn; i++) {
+        worker2(&w, i, i % 64);
+    }
+//	kt_for_single(opt->n_threads, worker2, &w, (opt->flag&MEM_F_PE)? n>>1 : n); // generate alignment
 #endif
-	kt_for_single(opt->n_threads, worker2, &w, (opt->flag&MEM_F_PE)? n>>1 : n); // generate alignment
-#ifdef use_swlu
-    swlu_prof_stop();
-#endif
-	
+
+
     t_work2 += GetTime() - t0;
 	free(w.regs);
 	if (bwa_verbose >= 3)

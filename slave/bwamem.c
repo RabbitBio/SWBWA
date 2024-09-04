@@ -1294,7 +1294,7 @@ void worker1(void *data, int i, int tid)
 		if (bwa_verbose >= 4) printf("=====> Processing read '%s' <=====\n", w->seqs[i].name);
 		reg = mem_align1_core(i, w->opt, w->bwt, w->bns, w->pac, w->seqs[i].l_seq, w->seqs[i].seq, w->aux[tid]);
         if(reg.n > w->regs[i].m) {
-            fprintf(stderr, "size GG %d > %d\n", reg.n, w->regs[i].m);
+            fprintf(stderr, "size GG %zu > %zu\n", reg.n, w->regs[i].m);
             exit(0);
         } else {
             w->regs[i].n = reg.n;
@@ -1307,7 +1307,7 @@ void worker1(void *data, int i, int tid)
 		if (bwa_verbose >= 4) printf("=====> Processing read '%s'/1 <=====\n", w->seqs[i<<1|0].name);
 		reg = mem_align1_core(i * 2, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|0].l_seq, w->seqs[i<<1|0].seq, w->aux[tid]);
         if(reg.n > w->regs[i<<1|0].m) {
-            fprintf(stderr, "size GG %d > %d\n", reg.n, w->regs[i<<1|0].m);
+            fprintf(stderr, "size GG %zu > %zu\n", reg.n, w->regs[i<<1|0].m);
             exit(0);
         } else {
             w->regs[i<<1|0].n = reg.n;
@@ -1318,7 +1318,7 @@ void worker1(void *data, int i, int tid)
 		if (bwa_verbose >= 4) printf("=====> Processing read '%s'/2 <=====\n", w->seqs[i<<1|1].name);
         reg = mem_align1_core(i * 2 + 1, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|1].l_seq, w->seqs[i<<1|1].seq, w->aux[tid]);
         if(reg.n > w->regs[i<<1|1].m) {
-            fprintf(stderr, "size GG %d > %d\n", reg.n, w->regs[i<<1|1].m);
+            fprintf(stderr, "size GG %zu > %zu\n", reg.n, w->regs[i<<1|1].m);
             exit(0);
         } else {
             w->regs[i<<1|1].n = reg.n;
@@ -1341,7 +1341,7 @@ void init_worker1(void *data, int i, int tid)
 		reg = mem_align1_core(i * 2, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|0].l_seq, w->seqs[i<<1|0].seq, w->aux[tid]);
 
         if(reg.n > w->regs[i<<1|0].m) {
-            fprintf(stderr, "size GG %d > %d\n", reg.n, w->regs[i<<1|0].m);
+            fprintf(stderr, "size GG %zu > %zu\n", reg.n, w->regs[i<<1|0].m);
         }
         w->regs[i<<1|0].n = reg.n;
         for(int j = 0; j < reg.n; j++) w->regs[i<<1|0].a[j] = reg.a[j];
@@ -1352,7 +1352,7 @@ void init_worker1(void *data, int i, int tid)
         reg = mem_align1_core(i * 2 + 1, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|1].l_seq, w->seqs[i<<1|1].seq, w->aux[tid]);
 
         if(reg.n > w->regs[i<<1|1].m) {
-            fprintf(stderr, "size GG %d > %d\n", reg.n, w->regs[i<<1|1].m);
+            fprintf(stderr, "size GG %zu > %zu\n", reg.n, w->regs[i<<1|1].m);
         }
         w->regs[i<<1|1].n = reg.n;
         for(int j = 0; j < reg.n; j++) w->regs[i<<1|1].a[j] = reg.a[j];
@@ -1360,24 +1360,117 @@ void init_worker1(void *data, int i, int tid)
 	}
 }
 
-static void worker2(void *data, int i, int tid)
+void worker2(void *data, int i, int tid)
 {
-	extern int mem_sam_pe(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, const mem_pestat_t pes[4], uint64_t id, bseq1_t s[2], mem_alnreg_v a[2]);
-	extern void mem_reg2ovlp(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, bseq1_t *s, mem_alnreg_v *a);
-	worker_t *w = (worker_t*)data;
-	if (!(w->opt->flag&MEM_F_PE)) {
-		if (bwa_verbose >= 4) printf("=====> Finalizing read '%s' <=====\n", w->seqs[i].name);
-		mem_mark_primary_se(w->opt, w->regs[i].n, w->regs[i].a, w->n_processed + i);
-		if (w->opt->flag & MEM_F_PRIMARY5) mem_reorder_primary5(w->opt->T, &w->regs[i]);
-		mem_reg2sam(w->opt, w->bns, w->pac, &w->seqs[i], &w->regs[i], 0, 0);
-		free(w->regs[i].a);
-	} else {
-		if (bwa_verbose >= 4) printf("=====> Finalizing read pair '%s' <=====\n", w->seqs[i<<1|0].name);
-        mem_alnreg_v a = w->regs[i<<1];
-		mem_sam_pe(w->opt, w->bns, w->pac, w->pes, (w->n_processed>>1) + i, &w->seqs[i<<1], &w->regs[i<<1]);
-		free(w->regs[i<<1|0].a); free(w->regs[i<<1|1].a);
-	}
+    extern int mem_sam_pe(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, const mem_pestat_t pes[4], uint64_t id, bseq1_t s[2], mem_alnreg_v a[2]);
+    extern void mem_reg2ovlp(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, bseq1_t *s, mem_alnreg_v *a);
+    worker_t *w = (worker_t*)data;
+    if (!(w->opt->flag&MEM_F_PE)) {
+        if (bwa_verbose >= 4) printf("=====> Finalizing read '%s' <=====\n", w->seqs[i].name);
+        mem_mark_primary_se(w->opt, w->regs[i].n, w->regs[i].a, w->n_processed + i);
+        if (w->opt->flag & MEM_F_PRIMARY5) mem_reorder_primary5(w->opt->T, &w->regs[i]);
+        mem_reg2sam(w->opt, w->bns, w->pac, &w->seqs[i], &w->regs[i], 0, 0);
+        free(w->regs[i].a);
+    } else {
+        if (bwa_verbose >= 4) printf("=====> Finalizing read pair '%s' <=====\n", w->seqs[i<<1|0].name);
+
+        mem_alnreg_v tmp_reg[2];
+        for(int id = 0; id < 2; id++) {
+            tmp_reg[id].n = w->regs[i<<1|id].n;
+            tmp_reg[id].m = w->regs[i<<1|id].m;
+            tmp_reg[id].a = malloc(tmp_reg[id].m * sizeof(mem_alnreg_t));
+            memcpy(tmp_reg[id].a, w->regs[i<<1|id].a, tmp_reg[id].n * sizeof(mem_alnreg_t));
+        }
+
+
+        bseq1_t tmp_seq[2];
+        for (int id = 0; id < 2; id++) {
+
+            tmp_seq[id].l_seq = w->seqs[i<<1|id].l_seq;
+            tmp_seq[id].id = w->seqs[i<<1|id].id;
+
+            int name_len = w->seqs[i<<1|id].name ? strlen(w->seqs[i<<1|id].name) : 0;
+            int comment_len = w->seqs[i<<1|id].comment ? strlen(w->seqs[i<<1|id].comment) : 0;
+            int seq_len = w->seqs[i<<1|id].l_seq;
+            int qual_len = w->seqs[i<<1|id].qual ? strlen(w->seqs[i<<1|id].qual) : 0;
+
+            if (name_len > 0) {
+                tmp_seq[id].name = malloc((name_len + 1) * sizeof(char));
+                memcpy(tmp_seq[id].name, w->seqs[i<<1|id].name, name_len * sizeof(char));
+                tmp_seq[id].name[name_len] = '\0';
+            } else {
+                tmp_seq[id].name = NULL;
+            }
+
+            if (comment_len > 0) {
+                tmp_seq[id].comment = malloc((comment_len + 1) * sizeof(char));
+                memcpy(tmp_seq[id].comment, w->seqs[i<<1|id].comment, comment_len * sizeof(char));
+                tmp_seq[id].comment[comment_len] = '\0';
+            } else {
+                tmp_seq[id].comment = NULL;
+            }
+
+            if (seq_len > 0) {
+                tmp_seq[id].seq = malloc((seq_len + 1) * sizeof(char));
+                memcpy(tmp_seq[id].seq, w->seqs[i<<1|id].seq, seq_len * sizeof(char));
+                tmp_seq[id].seq[seq_len] = '\0';
+            } else {
+                tmp_seq[id].seq = NULL;
+            }
+
+            if (qual_len > 0) {
+                tmp_seq[id].qual = malloc((qual_len + 1) * sizeof(char));
+                memcpy(tmp_seq[id].qual, w->seqs[i<<1|id].qual, qual_len * sizeof(char));
+                tmp_seq[id].qual[qual_len] = '\0';
+            } else {
+                tmp_seq[id].qual = NULL;
+            }
+        }
+
+
+
+	
+
+//        mem_sam_pe(w->opt, w->bns, w->pac, w->pes, (w->n_processed>>1) + i, &w->seqs[i<<1], &w->regs[i<<1]);
+        mem_sam_pe(w->opt, w->bns, w->pac, w->pes, (w->n_processed>>1) + i, tmp_seq, tmp_reg);
+
+        for(int id = 0; id < 2; id++) {
+            int mpe_sam_len = strlen(w->seqs[i<<1|id].sam);
+            int cpe_sam_len = strlen(tmp_seq[id].sam);
+            if(cpe_sam_len + 1 > mpe_sam_len) {
+                fprintf(stderr, "%d cpe_sam_len > mpe_sam_len, %d %d\n", i<<1|id, cpe_sam_len, mpe_sam_len);
+                exit(0);
+            }
+            memcpy(w->seqs[i<<1|id].sam, tmp_seq[id].sam, cpe_sam_len * sizeof(char));
+            w->seqs[i<<1|id].sam[cpe_sam_len] = '\0';
+            if(strlen(w->seqs[i<<1|id].name) != strlen(tmp_seq[id].name)) {
+                fprintf(stderr, "name len GG, %lu %lu\n", strlen(w->seqs[i<<1|id].name), strlen(tmp_seq[id].name));
+                exit(0);
+            }
+            //if(strlen(w->seqs[i<<1|id].comment) != strlen(tmp_seq[id].comment)) {
+            //    fprintf(stderr, "comment len GG, %lu %lu\n", strlen(w->seqs[i<<1|id].comment), strlen(tmp_seq[id].comment));
+            //    exit(0);
+            //}
+            //if(w->seqs[i<<1|id].l_seq != strlen(tmp_seq[id].seq)) {
+            //    fprintf(stderr, "seq len GG, %lu %lu\n", w->seqs[i<<1|id].l_seq, strlen(tmp_seq[id].seq));
+            //    exit(0);
+            //}
+            memcpy(w->seqs[i<<1|id].seq, tmp_seq[id].seq, w->seqs[i<<1|id].l_seq * sizeof(char));
+            //if(strlen(w->seqs[i<<1|id].qual) != strlen(tmp_seq[id].qual)) {
+            //    fprintf(stderr, "qual len GG, %lu %lu\n", strlen(w->seqs[i<<1|id].qual), strlen(tmp_seq[id].qual));
+            //    exit(0);
+            //}
+            if(tmp_reg[id].a) free(tmp_reg[id].a);
+            if(tmp_seq[id].name) free(tmp_seq[id].name);
+            if(tmp_seq[id].comment) free(tmp_seq[id].comment);
+            if(tmp_seq[id].seq) free(tmp_seq[id].seq);
+            if(tmp_seq[id].qual) free(tmp_seq[id].qual);
+            if(tmp_seq[id].sam) free(tmp_seq[id].sam);
+        }
+    }
 }
+
+
 
 void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bns, const uint8_t *pac, int64_t n_processed, int n, bseq1_t *seqs, const mem_pestat_t *pes0)
 {

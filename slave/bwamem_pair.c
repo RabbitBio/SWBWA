@@ -181,8 +181,8 @@ int mem_matesw(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, co
 			if (aln.score >= opt->min_seed_len && aln.qb >= 0) { // something goes wrong if aln.qb < 0
 				b.rid = a->rid;
 				b.is_alt = a->is_alt;
-				b.qb = is_rev? l_ms - (aln.qe + 1) : aln.qb;                                                                                                                                                                              
-				b.qe = is_rev? l_ms - aln.qb : aln.qe + 1; 
+				b.qb = is_rev? l_ms - (aln.qe + 1) : aln.qb;
+				b.qe = is_rev? l_ms - aln.qb : aln.qe + 1;
 				b.rb = is_rev? (l_pac<<1) - (rb + aln.te + 1) : rb + aln.tb;
 				b.re = is_rev? (l_pac<<1) - (rb + aln.tb) : rb + aln.te + 1;
 				b.score = aln.score;
@@ -242,9 +242,13 @@ int mem_pair(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, cons
 				//printf("%d: %lld\n", k, dist);
 				if (dist > pes[dir].high) break;
 				if (dist < pes[dir].low)  continue;
-				ns = (dist - pes[dir].avg) / pes[dir].std;
-				q = (int)((v.a[i].y>>32) + (v.a[k].y>>32) + .721 * log(2. * erfc(fabs(ns) * M_SQRT1_2)) * opt->a + .499); // .721 = 1/log(4)
-				if (q < 0) q = 0;
+				if(fabs(pes[dir].std) < 1e-6) {
+                    q = 0;
+                } else {
+                    ns = (dist - pes[dir].avg) / pes[dir].std;
+                    q = (int)((v.a[i].y>>32) + (v.a[k].y>>32) + .721 * log(2. * erfc(fabs(ns) * M_SQRT1_2)) * opt->a + .499); // .721 = 1/log(4)
+                }
+                if (q < 0) q = 0;
 				p = kv_pushp(pair64_t, u);
 				p->y = (uint64_t)k<<32 | i;
 				p->x = (uint64_t)q<<32 | (hash_64(p->y ^ id<<8) & 0xffffffffU);
@@ -277,6 +281,7 @@ void mem_reorder_primary5(int T, mem_alnreg_v *a);
 
 int mem_sam_pe(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, const mem_pestat_t pes[4], uint64_t id, bseq1_t s[2], mem_alnreg_v a[2])
 {
+
 	extern int mem_mark_primary_se(const mem_opt_t *opt, int n, mem_alnreg_t *a, int64_t id);
 	extern int mem_approx_mapq_se(const mem_opt_t *opt, const mem_alnreg_t *a);
 	extern void mem_reg2sam(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, bseq1_t *s, mem_alnreg_v *a, int extra_flag, const mem_aln_t *m);

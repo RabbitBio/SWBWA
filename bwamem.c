@@ -88,9 +88,15 @@ extern long long s_px2;
 
 
 #define bwt_sa_slave
+
+#define worker1_one_time
+
 #define bwt_sa_slave2
+extern void SLAVE_FUN(worker1_s_init());
+extern void SLAVE_FUN(worker1_s_fast());
 extern void SLAVE_FUN(worker1_s());
 extern void SLAVE_FUN(worker1_s_pre());
+extern void SLAVE_FUN(worker1_s_pre_fast());
 extern void SLAVE_FUN(worker2_s());
 
 
@@ -98,6 +104,7 @@ typedef struct{
     long nn;
     void* data;
     int* real_sizes;
+    mem_alnreg_v* cpe_regs;
 } Para_worker1_s;
 
 typedef struct{
@@ -1311,6 +1318,39 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
     long nn = (opt->flag&MEM_F_PE)? n>>1 : n;
     double t0 = GetTime();
 #ifdef bwt_sa_slave
+# ifdef worker1_one_time
+    athread_init();
+    c_px2++;
+    s_px2 += nn;
+    Para_worker1_s para;
+    para.nn = nn;
+    para.data = (void*)&w;
+    para.cpe_regs = (mem_alnreg_v*)malloc(n * sizeof(mem_alnreg_v));
+
+    __real_athread_spawn((void*)slave_worker1_s_pre_fast, &para, 1);
+    athread_join();
+      
+    fprintf(stderr, "slave pre done\n");
+    for(int i = 0; i < n; i++) {
+        w.regs[i].m = para.cpe_regs[i].n;
+        w.regs[i].a = malloc(sizeof(mem_alnreg_t) * w.regs[i].m);
+        if(w.regs[i].a == NULL) {
+            fprintf(stderr, "GG malloc %d null\n", para.cpe_regs[i].n);
+            exit(0);
+        }
+        w.regs[i].n = 0;
+    }
+
+    __real_athread_spawn((void*)slave_worker1_s_fast, &para, 1);
+    athread_join();
+    
+    fprintf(stderr, "slave round done\n");
+
+    athread_halt();
+
+    free(para.cpe_regs);
+
+# else
     athread_init();
     c_px2++;
     s_px2 += nn;
@@ -1341,12 +1381,14 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
     athread_halt();
 
     free(para.real_sizes);
+# endif
 
 #else
     for(int i = 0; i < nn; i++) {
         worker1(&w, i, i % 64);
     }
 #endif
+
 
 	//for (int i = 0; i < 64; ++i)
 	//	smem_aux_destroy(w.aux[i]);

@@ -1263,6 +1263,29 @@ typedef struct {
 } worker_t;
 
 
+void worker1_pre_fast(void *data, int i, int tid, mem_alnreg_v* cpe_regs)
+{
+	worker_t *w = (worker_t*)data;
+	if (!(w->opt->flag&MEM_F_PE)) {
+        mem_alnreg_v reg; 
+		if(bwa_verbose >= 4) printf("=====> Processing read '%s' <=====\n", w->seqs[i].name);
+		reg = mem_align1_core(i, w->opt, w->bwt, w->bns, w->pac, w->seqs[i].l_seq, w->seqs[i].seq, w->aux[tid]);
+        cpe_regs[i].n = reg.n;
+        cpe_regs[i].a = reg.a;
+	} else {
+        mem_alnreg_v reg; 
+		if (bwa_verbose >= 4) printf("=====> Processing read '%s'/1 <=====\n", w->seqs[i<<1|0].name);
+		reg = mem_align1_core(i * 2, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|0].l_seq, w->seqs[i<<1|0].seq, w->aux[tid]);
+        cpe_regs[i<<1|0].n = reg.n;
+        cpe_regs[i<<1|0].a = reg.a;
+
+		if (bwa_verbose >= 4) printf("=====> Processing read '%s'/2 <=====\n", w->seqs[i<<1|1].name);
+        reg = mem_align1_core(i * 2 + 1, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|1].l_seq, w->seqs[i<<1|1].seq, w->aux[tid]);
+        cpe_regs[i<<1|1].n = reg.n;
+        cpe_regs[i<<1|1].a = reg.a;
+	}
+}
+
 void worker1_pre(void *data, int i, int tid, int* real_sizes)
 {
 	worker_t *w = (worker_t*)data;
@@ -1285,6 +1308,25 @@ void worker1_pre(void *data, int i, int tid, int* real_sizes)
         free(reg.a);
 	}
 }
+
+void worker1_fast(void *data, int i, int tid, mem_alnreg_v* cpe_regs)
+{
+	worker_t *w = (worker_t*)data;
+	if (!(w->opt->flag&MEM_F_PE)) {
+        memcpy(w->regs[i].a, cpe_regs[i].a, cpe_regs[i].n * sizeof(mem_alnreg_t));
+        w->regs[i].n = cpe_regs[i].n;
+        free(cpe_regs[i].a);
+	} else {
+        memcpy(w->regs[i<<1|0].a, cpe_regs[i<<1|0].a, cpe_regs[i<<1|0].n * sizeof(mem_alnreg_t));
+        w->regs[i<<1|0].n = cpe_regs[i<<1|0].n;
+        free(cpe_regs[i<<1|0].a);
+	
+        memcpy(w->regs[i<<1|1].a, cpe_regs[i<<1|1].a, cpe_regs[i<<1|1].n * sizeof(mem_alnreg_t));
+        w->regs[i<<1|1].n = cpe_regs[i<<1|1].n;
+        free(cpe_regs[i<<1|1].a);
+	}
+}
+
 
 void worker1(void *data, int i, int tid)
 {
@@ -1328,37 +1370,30 @@ void worker1(void *data, int i, int tid)
 	}
 }
 
-void init_worker1(void *data, int i, int tid)
+void worker1_init(void *data, int i, int tid)
 {
 	worker_t *w = (worker_t*)data;
 	if (!(w->opt->flag&MEM_F_PE)) {
 		if (bwa_verbose >= 4) printf("=====> Processing read '%s' <=====\n", w->seqs[i].name);
 		w->regs[i] = mem_align1_core(i, w->opt, w->bwt, w->bns, w->pac, w->seqs[i].l_seq, w->seqs[i].seq, w->aux[tid]);
 	} else {
-        mem_alnreg_v reg; 
 
 		if (bwa_verbose >= 4) printf("=====> Processing read '%s'/1 <=====\n", w->seqs[i<<1|0].name);
-		reg = mem_align1_core(i * 2, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|0].l_seq, w->seqs[i<<1|0].seq, w->aux[tid]);
-
-        if(reg.n > w->regs[i<<1|0].m) {
-            fprintf(stderr, "size GG %zu > %zu\n", reg.n, w->regs[i<<1|0].m);
-        }
-        w->regs[i<<1|0].n = reg.n;
-        for(int j = 0; j < reg.n; j++) w->regs[i<<1|0].a[j] = reg.a[j];
-        free(reg.a);
-
+		w->regs[i<<1|0] = mem_align1_core(i * 2, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|0].l_seq, w->seqs[i<<1|0].seq, w->aux[tid]);
 
 		if (bwa_verbose >= 4) printf("=====> Processing read '%s'/2 <=====\n", w->seqs[i<<1|1].name);
-        reg = mem_align1_core(i * 2 + 1, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|1].l_seq, w->seqs[i<<1|1].seq, w->aux[tid]);
+        w->regs[i<<1|1] = mem_align1_core(i * 2 + 1, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|1].l_seq, w->seqs[i<<1|1].seq, w->aux[tid]);
+        //for(int j = 0; j < w->regs[i<<1|1].n; j++) {
+        //    mem_alnreg_t *aln = &(w->regs[i<<1|1].a[j]);
+        //    if(aln->score < 0 ||  aln->score > 10000) {
+        //        fprintf(stderr, "%d-%d: mem_alnreg_t: rb=%ld, re=%ld, qb=%d, qe=%d, rid=%d, score=%d, truesc=%d, sub=%d, alt_sc=%d, csub=%d, sub_n=%d, w=%d, seedcov=%d, secondary=%d, secondary_all=%d, seedlen0=%d, n_comp=%d, is_alt=%d, frac_rep=%f, hash=%lu\n",
+        //                i<<1|1, j, aln->rb, aln->re, aln->qb, aln->qe, aln->rid, aln->score, aln->truesc, aln->sub, aln->alt_sc, aln->csub, aln->sub_n, aln->w, aln->seedcov, aln->secondary, aln->secondary_all, aln->seedlen0, aln->n_comp, aln->is_alt, aln->frac_rep, aln->hash);
+        //    }
 
-        if(reg.n > w->regs[i<<1|1].m) {
-            fprintf(stderr, "size GG %zu > %zu\n", reg.n, w->regs[i<<1|1].m);
-        }
-        w->regs[i<<1|1].n = reg.n;
-        for(int j = 0; j < reg.n; j++) w->regs[i<<1|1].a[j] = reg.a[j];
-        free(reg.a);
+        //}
 	}
 }
+
 
 void worker2(void *data, int i, int tid)
 {

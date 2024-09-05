@@ -29,6 +29,7 @@
 #include "kstring.h"
 #include "utils.h"
 #include <mpi.h>
+#include<athread.h>
 
 #ifndef PACKAGE_VERSION
 #define PACKAGE_VERSION "0.7.17-r1198-dirty"
@@ -100,6 +101,8 @@ int main(int argc, char *argv[])
     //}
     //fprintf(stderr, "aa %d\n", aa);
 
+    //athread_init();
+
 	extern char *bwa_pg;
 	int i, ret;
 	double t_real;
@@ -140,6 +143,9 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "\n[%s] Real time: %.3f sec; CPU: %.3f sec\n", __func__, realtime() - t_real, cputime());
 	}
 	free(bwa_pg);
+
+    //athread_halt();
+
     MPI_Finalize();
 	return ret;
 }

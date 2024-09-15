@@ -98,9 +98,9 @@ typedef struct {
 	int secondary;  // index of the parent hit shadowing the current hit; <0 if primary
 	int secondary_all;
 	int seedlen0;   // length of the starting seed
-	//int n_comp:30, is_alt:2; // number of sub-alignments chained together
-    int n_comp;
-    int is_alt;
+	int n_comp:30, is_alt:2; // number of sub-alignments chained together
+    //int n_comp;
+    //int is_alt;
 	float frac_rep;
 	uint64_t hash;
 } mem_alnreg_t;
@@ -117,11 +117,11 @@ typedef struct { // This struct is only used for the convenience of API.
 	int64_t pos;     // forward strand 5'-end mapping position
 	int rid;         // reference sequence index in bntseq_t; <0 for unmapped
 	int flag;        // extra flag
-	//uint32_t is_rev:1, is_alt:1, mapq:8, NM:22; // is_rev: whether on the reverse strand; mapq: mapping quality; NM: edit distance
-    uint32_t is_rev;
-    uint32_t is_alt;
-    uint32_t mapq;
-    uint32_t NM;
+	uint32_t is_rev:1, is_alt:1, mapq:8, NM:22; // is_rev: whether on the reverse strand; mapq: mapping quality; NM: edit distance
+    //uint32_t is_rev;
+    //uint32_t is_alt;
+    //uint32_t mapq;
+    //uint32_t NM;
 
 
 	int n_cigar;     // number of CIGAR operations

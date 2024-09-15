@@ -43,6 +43,15 @@ KSEQ_DECLARE(gzFile)
 extern unsigned char nst_nt4_table[256];
 
 
+//#define use_lwpf3
+
+#ifdef use_lwpf3
+#define LWPF_UNITS U(TEST)
+#include "lwpf.h"
+#endif
+
+
+
 double t_tot = 0;
 double t_step1 = 0;
 double t_step2 = 0;
@@ -153,7 +162,8 @@ static void *process(void *shared, int step, void *_data)
             }
 			//if (data->seqs[i].sam) err_fputs(data->seqs[i].sam, stdout);
 			free(data->seqs[i].name); free(data->seqs[i].comment);
-			free(data->seqs[i].seq); free(data->seqs[i].qual); free(data->seqs[i].sam);
+			free(data->seqs[i].seq); free(data->seqs[i].qual);
+            //free(data->seqs[i].sam);
 		}
 		free(data->seqs); free(data);
         t_step3 += GetTime() - t0;
@@ -440,13 +450,21 @@ int main_mem(int argc, char *argv[])
 #ifdef use_swlu
     swlu_debug_init();
     swlu_prof_init();
-    //swlu_prof_start();
 #endif	
+
+
+#ifdef use_lwpf3
+    lwpf_init(NULL);
+#endif
     
     kt_pipeline_single(1, process, &aux, 3);
 
+#ifdef use_lwpf3
+    lwpf_report_summary(stdout);
+    //lwpf_report_detail(stdout);
+#endif
+
 #ifdef use_swlu
-    //swlu_prof_stop();
     swlu_prof_print();
 #endif	
 

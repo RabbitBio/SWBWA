@@ -298,9 +298,6 @@ kswr_t ksw_i16(kswq_t *q, int tlen, const uint8_t *target, int _o_del, int _e_de
 	}
 	// the core loop
 	for (i = 0; i < tlen; ++i) {
-    //int ttlen = tlen;
-    //if(tlen >= 1) ttlen = 1;
-	//for (i = 0; i < ttlen; ++i) {
 		int j, k, imax;
 		__m128i e, t, h, f = zero, max = zero, *S = q->qp + target[i] * slen; // s is the 1st score vector
 		h = _mm_load_si128(H0 + slen - 1); // h={2,5,8,11,14,17,-1,-1} in the above example

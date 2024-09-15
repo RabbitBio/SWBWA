@@ -46,7 +46,6 @@
 #  include "malloc_wrap.h"
 #endif
 
-
 #include<athread.h>
 
 /* Theory on probability and scoring *ungapped* alignment
@@ -76,6 +75,9 @@ static const bntseq_t *global_bns = 0; // for debugging only
 
 extern double t_work1;
 extern double t_work2;
+extern double t_work2_1;
+extern double t_work2_2;
+extern double t_work2_3;
 
 extern double t_work1_3;
 extern double t_work1_3_1;
@@ -250,10 +252,10 @@ typedef struct {
 
 typedef struct {
 	int n, m, first, rid;
-	//uint32_t w:29, kept:2, is_alt:1;
-    uint32_t w;
-    uint32_t kept;
-    uint32_t is_alt;
+	uint32_t w:29, kept:2, is_alt:1;
+    //uint32_t w;
+    //uint32_t kept;
+    //uint32_t is_alt;
 	float frac_rep;
 	int64_t pos;
 	mem_seed_t *seeds;
@@ -1401,28 +1403,44 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 
     t0 = GetTime();
 #ifdef bwt_sa_slave2
-    athread_init();
 
+    double tt0 = GetTime();
+    athread_init();
     Para_worker2_s para2;
     para2.nn = nn;
     para2.data = (void*)&w;
-
-    for(int i = 0; i < n; i++) {
-        //fprintf(stderr, "qual %s\n", w.seqs[i].qual);
-        w.seqs[i].sam = malloc((w.seqs[i].l_seq << 6) * sizeof(char) + 1);
-        memset(w.seqs[i].sam, 'A', (w.seqs[i].l_seq << 6) * sizeof(char));
-        w.seqs[i].sam[(w.seqs[i].l_seq << 6)] = '\0';
-        //fprintf(stderr, "sam size %d %d\n", i, strlen(w.seqs[i].sam));
+    static int sam_opt_cnt = 0;
+    static char** const_sams;
+    sam_opt_cnt++;
+    if(sam_opt_cnt == 1) {
+        int ngs_mx_len = 0;
+        for(int i = 0; i < n; i++) {
+            if(w.seqs[i].l_seq > ngs_mx_len) ngs_mx_len = w.seqs[i].l_seq;
+        }
+        const_sams = malloc(n * 2 * sizeof(char*));
+        for(int i = 0; i < n; i++) {
+            const_sams[i] = malloc((ngs_mx_len << 6) * sizeof(char) + 1);
+            memset(const_sams[i], 'A', (ngs_mx_len << 6) * sizeof(char));
+        }
     }
 
+    for(int i = 0; i < n; i++) {
+        w.seqs[i].sam = const_sams[i];
+        w.seqs[i].sam[(w.seqs[i].l_seq << 6)] = '\0';
+    }
+    t_work2_1 += GetTime() - tt0;
+
+    tt0 = GetTime();
     __real_athread_spawn((void*)slave_worker2_s, &para2, 1);
     athread_join();
-
     athread_halt();
+    t_work2_2 += GetTime() - tt0;
 
+    tt0 = GetTime();
     for(int i = 0; i < n; i++) {
         free(w.regs[i].a);
     }
+    t_work2_3 += GetTime() - tt0;
 #else
     for(int i = 0; i < nn; i++) {
         worker2(&w, i, i % 64);

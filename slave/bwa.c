@@ -39,6 +39,7 @@
 #  include "malloc_wrap.h"
 #endif
 
+#include "lwpf3_my_cpe.h"
 int bwa_verbose = 3;
 int bwa_dbg = 0;
 char bwa_rg_id[256];
@@ -147,7 +148,7 @@ void bwa_fill_scmat(int a, int b, int8_t mat[25])
 // Generate CIGAR when the alignment end points are known
 uint32_t *bwa_gen_cigar2(const int8_t mat[25], int o_del, int e_del, int o_ins, int e_ins, int w_, int64_t l_pac, const uint8_t *pac, int l_query, uint8_t *query, int64_t rb, int64_t re, int *score, int *n_cigar, int *NM)
 {
-	uint32_t *cigar = 0;
+    uint32_t *cigar = 0;
 	uint8_t tmp, *rseq;
 	int i;
 	int64_t rlen;
@@ -157,8 +158,21 @@ uint32_t *bwa_gen_cigar2(const int8_t mat[25], int o_del, int e_del, int o_ins, 
 	if (n_cigar) *n_cigar = 0;
 	if (NM) *NM = -1;
 	if (l_query <= 0 || rb >= re || (rb < l_pac && re > l_pac)) return 0; // reject if negative length or bridging the forward and reverse strand
+
+#ifdef use_lwpf3
+    lwpf_start(l_bwa_gen_cigar2);
+#endif
 	rseq = bns_get_seq(l_pac, pac, rb, re, &rlen);
+
+#ifdef use_lwpf3
+    lwpf_stop(l_bwa_gen_cigar2);
+#endif
+	
 	if (re - rb != rlen) goto ret_gen_cigar; // possible if out of range
+
+#ifdef use_lwpf3
+    lwpf_start(l_bwa_gen_cigar2);
+#endif
 	if (rb >= l_pac) { // then reverse both query and rseq; this is to ensure indels to be placed at the leftmost position
 		for (i = 0; i < l_query>>1; ++i)
 			tmp = query[i], query[i] = query[l_query - 1 - i], query[l_query - 1 - i] = tmp;
@@ -227,7 +241,10 @@ uint32_t *bwa_gen_cigar2(const int8_t mat[25], int o_del, int e_del, int o_ins, 
 	if (rb >= l_pac) // reverse back query
 		for (i = 0; i < l_query>>1; ++i)
 			tmp = query[i], query[i] = query[l_query - 1 - i], query[l_query - 1 - i] = tmp;
-
+#ifdef use_lwpf3
+    lwpf_stop(l_bwa_gen_cigar2);
+#endif
+	
 ret_gen_cigar:
 	free(rseq);
 	return cigar;

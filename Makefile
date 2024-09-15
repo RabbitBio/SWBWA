@@ -1,6 +1,6 @@
 CC=		 	mpicc
 #CC=			clang --analyze
-CFLAGS= -g -Wall -Wno-unused-function -O2 -I ~/online/ylf/init_swlu/swlu/include
+CFLAGS= -w -g -Wall -Wno-unused-function -O2 -I ~/online/ylf/init_swlu/swlu/include -I/home/export/online1/mdt00/shisuan/sweq/ylf/someGit/lwpf3
 #CFLAGS=		-g -Wall -Wno-unused-function
 #WRAP_MALLOC=-DUSE_MALLOC_WRAPPERS
 AR=			ar
@@ -29,10 +29,10 @@ endif
 .SUFFIXES:.c .o .cc
 
 .c.o:
-		$(CC) -mhost -c $(CFLAGS) $(DFLAGS) $(INCLUDES) $(CPPFLAGS) $< -o $@
+		$(CC) -mhost -fPIC -mieee -mftz -faddress_align=32 -c $(CFLAGS) $(DFLAGS) $(INCLUDES) $(CPPFLAGS) $< -o $@
 
 $(SLAVE_DIR)/%.o: $(SLAVE_DIR)/%.c
-		$(CC) -mslave -c $(CFLAGS) $< -o $@
+		$(CC) -mslave -msimd  -fPIC -mieee -mftz -faddress_align=64 -c $(CFLAGS) $< -o $@
 
 
 all:$(PROG)

@@ -46,6 +46,7 @@
 #include <crts.h>
 
 
+#include "lwpf3_my_cpe.h"
 
 #ifdef USE_MALLOC_WRAPPERS
 #  include "malloc_wrap.h"
@@ -228,10 +229,10 @@ typedef struct {
 
 typedef struct {
 	int n, m, first, rid;
-	//uint32_t w:29, kept:2, is_alt:1;
-	uint32_t w;
-    uint32_t kept;
-    uint32_t is_alt;
+	uint32_t w:29, kept:2, is_alt:1;
+	//uint32_t w;
+    //uint32_t kept;
+    //uint32_t is_alt;
 	float frac_rep;
 	int64_t pos;
 	mem_seed_t *seeds;
@@ -514,7 +515,14 @@ int mem_sort_dedup_patch(const mem_opt_t *opt, const bntseq_t *bns, const uint8_
 {
 	int m, i, j;
 	if (n <= 1) return n;
+
+#ifdef use_lwpf3
+    lwpf_start(l_sort_1);
+#endif
 	ks_introsort(mem_ars2, n, a); // sort by the END position, not START!
+#ifdef use_lwpf3
+    lwpf_stop(l_sort_1);
+#endif
 	for (i = 0; i < n; ++i) a[i].n_comp = 1;
 	for (i = 1; i < n; ++i) {
 		mem_alnreg_t *p = &a[i];
@@ -551,7 +559,14 @@ int mem_sort_dedup_patch(const mem_opt_t *opt, const bntseq_t *bns, const uint8_
 			else ++m;
 		}
 	n = m;
+
+#ifdef use_lwpf3
+    lwpf_start(l_sort_2);
+#endif
 	ks_introsort(mem_ars, n, a);
+#ifdef use_lwpf3
+    lwpf_stop(l_sort_2);
+#endif
 	for (i = 1; i < n; ++i) { // mark identical hits
 		if (a[i].score == a[i-1].score && a[i].rb == a[i-1].rb && a[i].qb == a[i-1].qb)
 			a[i].qe = a[i].qb;
@@ -1401,6 +1416,8 @@ void worker2(void *data, int i, int tid)
     extern void mem_reg2ovlp(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, bseq1_t *s, mem_alnreg_v *a);
     worker_t *w = (worker_t*)data;
     if (!(w->opt->flag&MEM_F_PE)) {
+        fprintf("stderr", "TODO and test\n");
+        exit(0);
         if (bwa_verbose >= 4) printf("=====> Finalizing read '%s' <=====\n", w->seqs[i].name);
         mem_mark_primary_se(w->opt, w->regs[i].n, w->regs[i].a, w->n_processed + i);
         if (w->opt->flag & MEM_F_PRIMARY5) mem_reorder_primary5(w->opt->T, &w->regs[i]);
@@ -1409,6 +1426,9 @@ void worker2(void *data, int i, int tid)
     } else {
         if (bwa_verbose >= 4) printf("=====> Finalizing read pair '%s' <=====\n", w->seqs[i<<1|0].name);
 
+#ifdef use_lwpf3
+    lwpf_start(l_2_pre);
+#endif
         mem_alnreg_v tmp_reg[2];
         for(int id = 0; id < 2; id++) {
             tmp_reg[id].n = w->regs[i<<1|id].n;
@@ -1416,7 +1436,6 @@ void worker2(void *data, int i, int tid)
             tmp_reg[id].a = malloc(tmp_reg[id].m * sizeof(mem_alnreg_t));
             memcpy(tmp_reg[id].a, w->regs[i<<1|id].a, tmp_reg[id].n * sizeof(mem_alnreg_t));
         }
-
 
         bseq1_t tmp_seq[2];
         for (int id = 0; id < 2; id++) {
@@ -1462,26 +1481,56 @@ void worker2(void *data, int i, int tid)
             }
         }
 
-
+#ifdef use_lwpf3
+    lwpf_stop(l_2_pre);
+#endif
 
 	
 
+
+#ifdef use_lwpf3
+    lwpf_start(l_2_mem);
+#endif
+     
 //        mem_sam_pe(w->opt, w->bns, w->pac, w->pes, (w->n_processed>>1) + i, &w->seqs[i<<1], &w->regs[i<<1]);
         mem_sam_pe(w->opt, w->bns, w->pac, w->pes, (w->n_processed>>1) + i, tmp_seq, tmp_reg);
 
+#ifdef use_lwpf3
+    lwpf_stop(l_2_mem);
+#endif
+     
+
+#ifdef use_lwpf3
+    lwpf_start(l_2_after);
+#endif
+     
         for(int id = 0; id < 2; id++) {
-            int mpe_sam_len = strlen(w->seqs[i<<1|id].sam);
+
+#ifdef use_lwpf3
+    lwpf_start(l_2_after_1);
+#endif
+            //int mpe_sam_len = strlen(w->seqs[i<<1|id].sam);
+            //assert(mpe_sam_len == (w->seqs[i<<1|id].l_seq << 6));
+            int mpe_sam_len = w->seqs[i<<1|id].l_seq << 6;
+#ifdef use_lwpf3
+    lwpf_stop(l_2_after_1);
+#endif
+
+#ifdef use_lwpf3
+    lwpf_start(l_2_after_2);
+#endif
             int cpe_sam_len = strlen(tmp_seq[id].sam);
             if(cpe_sam_len + 1 > mpe_sam_len) {
                 fprintf(stderr, "%d cpe_sam_len > mpe_sam_len, %d %d\n", i<<1|id, cpe_sam_len, mpe_sam_len);
                 exit(0);
             }
+
             memcpy(w->seqs[i<<1|id].sam, tmp_seq[id].sam, cpe_sam_len * sizeof(char));
             w->seqs[i<<1|id].sam[cpe_sam_len] = '\0';
-            if(strlen(w->seqs[i<<1|id].name) != strlen(tmp_seq[id].name)) {
-                fprintf(stderr, "name len GG, %lu %lu\n", strlen(w->seqs[i<<1|id].name), strlen(tmp_seq[id].name));
-                exit(0);
-            }
+            //if(strlen(w->seqs[i<<1|id].name) != strlen(tmp_seq[id].name)) {
+            //    fprintf(stderr, "name len GG, %lu %lu\n", strlen(w->seqs[i<<1|id].name), strlen(tmp_seq[id].name));
+            //    exit(0);
+            //}
             //if(strlen(w->seqs[i<<1|id].comment) != strlen(tmp_seq[id].comment)) {
             //    fprintf(stderr, "comment len GG, %lu %lu\n", strlen(w->seqs[i<<1|id].comment), strlen(tmp_seq[id].comment));
             //    exit(0);
@@ -1495,14 +1544,29 @@ void worker2(void *data, int i, int tid)
             //    fprintf(stderr, "qual len GG, %lu %lu\n", strlen(w->seqs[i<<1|id].qual), strlen(tmp_seq[id].qual));
             //    exit(0);
             //}
+#ifdef use_lwpf3
+    lwpf_stop(l_2_after_2);
+#endif
+
+#ifdef use_lwpf3
+    lwpf_start(l_2_after_3);
+#endif
             if(tmp_reg[id].a) free(tmp_reg[id].a);
             if(tmp_seq[id].name) free(tmp_seq[id].name);
             if(tmp_seq[id].comment) free(tmp_seq[id].comment);
             if(tmp_seq[id].seq) free(tmp_seq[id].seq);
             if(tmp_seq[id].qual) free(tmp_seq[id].qual);
             if(tmp_seq[id].sam) free(tmp_seq[id].sam);
+#ifdef use_lwpf3
+    lwpf_stop(l_2_after_3);
+#endif
         }
     }
+
+#ifdef use_lwpf3
+    lwpf_stop(l_2_after);
+#endif
+     
 }
 
 

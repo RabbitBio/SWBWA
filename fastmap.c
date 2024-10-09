@@ -43,7 +43,7 @@ KSEQ_DECLARE(gzFile)
 extern unsigned char nst_nt4_table[256];
 
 
-//#define use_lwpf3
+#define use_lwpf3
 
 #ifdef use_lwpf3
 #define LWPF_UNITS U(TEST)
@@ -63,8 +63,10 @@ double t_work2 = 0;
 double t_work1_1 = 0;
 double t_work1_2 = 0;
 double t_work1_3 = 0;
+double t_work1_4 = 0;
+double t_work1_5 = 0;
+double t_work1_6 = 0;
 
-double t_work1_3_1 = 0;
 
 double t_work2_1 = 0;
 double t_work2_2 = 0;
@@ -447,6 +449,8 @@ int main_mem(int argc, char *argv[])
     double t0 = GetTime();
 
 
+    athread_init();
+
 #ifdef use_swlu
     swlu_debug_init();
     swlu_prof_init();
@@ -460,20 +464,28 @@ int main_mem(int argc, char *argv[])
     kt_pipeline_single(1, process, &aux, 3);
 
 #ifdef use_lwpf3
-    lwpf_report_summary(stdout);
+    FILE *file = fopen("lwpf.log", "w");
+    if (file == NULL) {
+        perror("Failed to open lwpf.log");
+        return 1;
+    }
+    lwpf_report_summary(file);
     //lwpf_report_detail(stdout);
+     fclose(file);
 #endif
 
 #ifdef use_swlu
     swlu_prof_print();
 #endif	
 
+    athread_halt();
+
     t_tot += GetTime() - t0;
 
 
     fprintf(stderr, "[timer] tot : %lf, step1 : %lf, step2 : %lf, step3 : %lf\n", t_tot, t_step1, t_step2, t_step3);
-    fprintf(stderr, "[timer] step2 --- work1 : %lf (1 : %lf, 2 : %lf, 3 : %lf [%lf]), work2 : %lf (1 : %lf, 2 : %lf, 3 : %lf)\n", 
-            t_work1, t_work1_1, t_work1_2, t_work1_3, t_work1_3_1, t_work2, t_work2_1, t_work2_2, t_work2_3);
+    fprintf(stderr, "[timer] step2 --- work1 : %lf (1 : %lf, 2 : %lf, 3 : %lf, 4 : %lf, 5 : %lf, 6 : %lf), work2 : %lf (1 : %lf, 2 : %lf, 3 : %lf)\n", 
+            t_work1, t_work1_1, t_work1_2, t_work1_3, t_work1_4, t_work1_5, t_work1_6, t_work2, t_work2_1, t_work2_2, t_work2_3);
     long long s_reg_sum2 = 0;
     fprintf(stderr, "[info] sum : %lld\n", s_reg_sum);
     fprintf(stderr, "[info] avg  %lld \  %lld\n", s_px2, c_px2);

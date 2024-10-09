@@ -35,9 +35,14 @@
 #include "bwt.h"
 #include "kvec.h"
 
+#include "lwpf3_my_cpe.h"
+
 #ifdef USE_MALLOC_WRAPPERS
 #  include "malloc_wrap.h"
 #endif
+
+#define use_my_prefetch
+#define my_prefetch_dis 8
 
 extern double t_extend;
 extern double t_bwt_sa;
@@ -174,6 +179,7 @@ void bwt_2occ(const bwt_t *bwt, bwtint_t k, bwtint_t l, ubyte_t c, bwtint_t *ok,
 	((bwt)->cnt_table[(b)&0xff] + (bwt)->cnt_table[(b)>>8&0xff]		\
 	 + (bwt)->cnt_table[(b)>>16&0xff] + (bwt)->cnt_table[(b)>>24])
 
+
 void bwt_occ4(const bwt_t *bwt, bwtint_t k, bwtint_t cnt[4])
 {
 	bwtint_t x;
@@ -267,11 +273,54 @@ int bwt_match_exact_alt(const bwt_t *bwt, int len, const ubyte_t *str, bwtint_t 
  * Bidirectional BWT *
  *********************/
 
+void bwt_extend_forward_base(const bwt_t *bwt, const bwtintv_t *ik, bwtintv_t ok[4], ubyte_t c)
+{
+	bwtint_t tk, tl;
+
+    lwpf_start(l_my_extend3);
+    bwt_2occ(bwt, ik->x[0] - 1, ik->x[0] - 1 + ik->x[2], c, &tk, &tl);
+    lwpf_stop(l_my_extend3);
+
+    lwpf_start(l_my_extend4);
+    ok[c].x[0] = bwt->L2[c] + 1 + tk;
+    ok[c].x[2] = tl - tk;
+    lwpf_stop(l_my_extend4);
+}
+
+void bwt_extend_backward_base(const bwt_t *bwt, const bwtintv_t *ik, bwtintv_t ok[4], ubyte_t c)
+{
+	bwtint_t tk[4], tl[4];
+	int i;
+
+    lwpf_start(l_my_extend5);
+    for(i = 3; i >= c; i--) {
+        bwt_2occ(bwt, ik->x[1] - 1, ik->x[1] - 1 + ik->x[2], i, &tk[i], &tl[i]);
+    }
+    lwpf_stop(l_my_extend5);
+
+    lwpf_start(l_my_extend6);
+	for (i = 3; i >= c; i--) {
+		ok[i].x[1] = bwt->L2[i] + 1 + tk[i];
+		ok[i].x[2] = tl[i] - tk[i];
+	}
+	ok[3].x[0] = ik->x[0] + (ik->x[1] <= bwt->primary && ik->x[1] + ik->x[2] - 1 >= bwt->primary);
+    for(i = 2; i >= c; i--) {
+        ok[i].x[0] = ok[i + 1].x[0] + ok[i + 1].x[2];
+    }
+    lwpf_stop(l_my_extend6);
+}
+
+
 void bwt_extend(const bwt_t *bwt, const bwtintv_t *ik, bwtintv_t ok[4], int is_back)
 {
 	bwtint_t tk[4], tl[4];
 	int i;
+
+    lwpf_start(l_my_extend1);
 	bwt_2occ4(bwt, ik->x[!is_back] - 1, ik->x[!is_back] - 1 + ik->x[2], tk, tl);
+    lwpf_stop(l_my_extend1);
+
+    lwpf_start(l_my_extend2);
 	for (i = 0; i != 4; ++i) {
 		ok[i].x[!is_back] = bwt->L2[i] + 1 + tk[i];
 		ok[i].x[2] = tl[i] - tk[i];
@@ -280,6 +329,7 @@ void bwt_extend(const bwt_t *bwt, const bwtintv_t *ik, bwtintv_t ok[4], int is_b
 	ok[2].x[is_back] = ok[3].x[is_back] + ok[3].x[2];
 	ok[1].x[is_back] = ok[2].x[is_back] + ok[2].x[2];
 	ok[0].x[is_back] = ok[1].x[is_back] + ok[1].x[2];
+    lwpf_stop(l_my_extend2);
 }
 
 static void bwt_reverse_intvs(bwtintv_v *p)
@@ -293,6 +343,7 @@ static void bwt_reverse_intvs(bwtintv_v *p)
 		}
 	}
 }
+
 // NOTE: $max_intv is not currently used in BWA-MEM
 int bwt_smem1a(const bwt_t *bwt, int len, const uint8_t *q, int x, int min_intv, uint64_t max_intv, bwtintv_v *mem, bwtintv_v *tmpvec[2])
 {
@@ -302,6 +353,10 @@ int bwt_smem1a(const bwt_t *bwt, int len, const uint8_t *q, int x, int min_intv,
 
 	mem->n = 0;
 	if (q[x] > 3) return x + 1;
+
+
+    lwpf_start(l_smem1a_forward);
+
 	if (min_intv < 1) min_intv = 1; // the interval size should be at least 1
 	kv_init(a[0]); kv_init(a[1]);
 	prev = tmpvec && tmpvec[0]? tmpvec[0] : &a[0]; // use the temporary vector if provided
@@ -317,27 +372,53 @@ int bwt_smem1a(const bwt_t *bwt, int len, const uint8_t *q, int x, int min_intv,
 			break;
 		} else if (q[i] < 4) { // an A/C/G/T base
 			c = 3 - q[i]; // complement of q[i]
-			bwt_extend(bwt, &ik, ok, 0);
+            //bwt_extend(bwt, &ik, ok, 0);
+			bwt_extend_backward_base(bwt, &ik, ok, c);
 			if (ok[c].x[2] != ik.x[2]) { // change of the interval size
 				kv_push(bwtintv_t, *curr, ik);
-				if (ok[c].x[2] < min_intv) break; // the interval size is too small to be extended further
+				if (ok[c].x[2] < min_intv) {
+                    break; // the interval size is too small to be extended further
+                }
 			}
 			ik = ok[c]; ik.info = i + 1;
+#ifdef use_my_prefetch
+            bwtint_t k1 = ok[c].x[0] - 1;
+            if(k1 != -1) __builtin_prefetch(bwt_occ_intv(bwt, k1 - (k1 >= bwt->primary)), 0, 3);
+            bwtint_t l1 = ok[c].x[0] - 1 + ok[c].x[2];
+            if(l1 != -1) __builtin_prefetch(bwt_occ_intv(bwt, l1 - (l1 >= bwt->primary)), 0, 3);
+            bwtint_t k2 = ok[c].x[1] - 1;
+            if(k2 != -1) __builtin_prefetch(bwt_occ_intv(bwt, k2 - (k2 >= bwt->primary)), 0, 3);
+            bwtint_t l2 = ok[c].x[1] - 1 + ok[c].x[2];
+            if(l2 != -1) __builtin_prefetch(bwt_occ_intv(bwt, l2 - (l2 >= bwt->primary)), 0, 3);
+#endif
 		} else { // an ambiguous base
 			kv_push(bwtintv_t, *curr, ik);
 			break; // always terminate extension at an ambiguous base; in this case, i<len always stands
 		}
 	}
+    lwpf_stop(l_smem1a_forward);
+
 	if (i == len) kv_push(bwtintv_t, *curr, ik); // push the last interval if we reach the end
 	bwt_reverse_intvs(curr); // s.t. smaller intervals (i.e. longer matches) visited first
 	ret = curr->a[0].info; // this will be the returned value
 	swap = curr; curr = prev; prev = swap;
 
+    lwpf_start(l_smem1a_backward);
 	for (i = x - 1; i >= -1; --i) { // backward search for MEMs
 		c = i < 0? -1 : q[i] < 4? q[i] : -1; // c==-1 if i<0 or q[i] is an ambiguous base
 		for (j = 0, curr->n = 0; j < prev->n; ++j) {
 			bwtintv_t *p = &prev->a[j];
-			if (c >= 0 && ik.x[2] >= max_intv) bwt_extend(bwt, p, ok, 1);
+//#ifdef use_my_prefetch
+//            if(c >= 0 && j + my_prefetch_dis < prev->n) {
+//                bwtintv_t *pp = &prev->a[j + my_prefetch_dis];
+//                bwtint_t k1 = pp->x[0] - 1;
+//                if(k1 != -1) __builtin_prefetch(bwt_occ_intv(bwt, k1 - (k1 >= bwt->primary)), 0, 3);
+//                bwtint_t l1 = pp->x[0] - 1 + pp->x[2];
+//                if(l1 != -1) __builtin_prefetch(bwt_occ_intv(bwt, l1 - (l1 >= bwt->primary)), 0, 3);
+//            }
+//#endif
+			if (c >= 0 && ik.x[2] >= max_intv) bwt_extend_forward_base(bwt, p, ok, c);
+            //if (c >= 0 && ik.x[2] >= max_intv) bwt_extend(bwt, p, ok, 1);
 			if (c < 0 || ik.x[2] < max_intv || ok[c].x[2] < min_intv) { // keep the hit if reaching the beginning or an ambiguous base or the intv is small enough
 				if (curr->n == 0) { // test curr->n>0 to make sure there are no longer matches
 					if (mem->n == 0 || i + 1 < mem->a[mem->n-1].info>>32) { // skip contained matches
@@ -348,11 +429,18 @@ int bwt_smem1a(const bwt_t *bwt, int len, const uint8_t *q, int x, int min_intv,
 			} else if (curr->n == 0 || ok[c].x[2] != curr->a[curr->n-1].x[2]) {
 				ok[c].info = p->info;
 				kv_push(bwtintv_t, *curr, ok[c]);
+#ifdef use_my_prefetch
+                bwtint_t k1 = ok[c].x[0] - 1;
+                if(k1 != -1) __builtin_prefetch(bwt_occ_intv(bwt, k1 - (k1 >= bwt->primary)), 0, 3);
+                bwtint_t l1 = ok[c].x[0] - 1 + ok[c].x[2];
+                if(l1 != -1) __builtin_prefetch(bwt_occ_intv(bwt, l1 - (l1 >= bwt->primary)), 0, 3);
+#endif
 			}
 		}
 		if (curr->n == 0) break;
 		swap = curr; curr = prev; prev = swap;
 	}
+    lwpf_stop(l_smem1a_backward);
 	bwt_reverse_intvs(mem); // s.t. sorted by the start coordinate
 
 	if (tmpvec == 0 || tmpvec[0] == 0) free(a[0].a);
@@ -377,11 +465,27 @@ int bwt_seed_strategy1(const bwt_t *bwt, int len, const uint8_t *q, int x, int m
 		if (q[i] < 4) { // an A/C/G/T base
 			c = 3 - q[i]; // complement of q[i]
 			bwt_extend(bwt, &ik, ok, 0);
-			if (ok[c].x[2] < max_intv && i - x >= min_len) {
+			//bwt_extend_backward_base(bwt, &ik, ok, c);
+            if (ok[c].x[2] < max_intv && i - x >= min_len) {
 				*mem = ok[c];
 				mem->info = (uint64_t)x<<32 | (i + 1);
 				return i + 1;
 			}
+            if (ok[c].x[2] == 0) {
+                return min_len + x + 1 < len ? min_len + x + 1 : len;
+            }
+			
+//#ifdef use_my_prefetch
+//            bwtint_t k1 = ok[c].x[0] - 1;
+//            if(k1 != -1) __builtin_prefetch(bwt_occ_intv(bwt, k1 - (k1 >= bwt->primary)), 0, 3);
+//            bwtint_t l1 = ok[c].x[0] - 1 + ok[c].x[2];
+//            if(l1 != -1) __builtin_prefetch(bwt_occ_intv(bwt, l1 - (l1 >= bwt->primary)), 0, 3);
+//            bwtint_t k2 = ok[c].x[1] - 1;
+//            if(k2 != -1) __builtin_prefetch(bwt_occ_intv(bwt, k2 - (k2 >= bwt->primary)), 0, 3);
+//            bwtint_t l2 = ok[c].x[1] - 1 + ok[c].x[2];
+//            if(l2 != -1) __builtin_prefetch(bwt_occ_intv(bwt, l2 - (l2 >= bwt->primary)), 0, 3);
+//#endif
+	
 			ik = ok[c];
 		} else return i + 1;
 	}

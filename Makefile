@@ -1,6 +1,7 @@
 CC=		 	mpicc
 #CC=			clang --analyze
-CFLAGS= -w -g -Wall -Wno-unused-function -O2 -I ~/online/ylf/init_swlu/swlu/include -I/home/export/online1/mdt00/shisuan/sweq/ylf/someGit/lwpf3
+CFLAGS= -w -g -Wall -Wno-unused-function -O2 -I/home/test/someGit/lwpf3
+#-fprofile-swperf
 #CFLAGS=		-g -Wall -Wno-unused-function
 #WRAP_MALLOC=-DUSE_MALLOC_WRAPPERS
 AR=			ar
@@ -14,7 +15,8 @@ AOBJS=		bwashm.o bwase.o bwaseqio.o bwtgap.o bwtaln.o bamlite.o \
 			bwtsw2_chain.o fastmap.o bwtsw2_pair.o
 PROG=		bwa
 INCLUDES=	
-LIBS=	~/online/ylf/init_swlu/swlu/lib/libswlu_mpi.a	-lm -lz -lpthread -lm_slave
+LIBS= -lm -lz -lpthread -lm_slave 
+#-lswperf
 SUBDIRS=	.
 
 
@@ -32,13 +34,13 @@ endif
 		$(CC) -mhost -fPIC -mieee -mftz -faddress_align=32 -c $(CFLAGS) $(DFLAGS) $(INCLUDES) $(CPPFLAGS) $< -o $@
 
 $(SLAVE_DIR)/%.o: $(SLAVE_DIR)/%.c
-		$(CC) -mslave -msimd  -fPIC -mieee -mftz -faddress_align=64 -c $(CFLAGS) $< -o $@
+		$(CC) -mslave -msimd -fPIC -mieee -mftz -faddress_align=64 -c $(CFLAGS) $< -o $@
 
 
 all:$(PROG)
 
 bwa:libbwa.a $(AOBJS) main.o $(SLAVE_OBJECTS)
-		$(CC) $(CFLAGS) $(LDFLAGS) $(AOBJS) main.o $(SLAVE_OBJECTS) -o $@ -L. -lbwa $(LIBS)
+		$(CC) -mhybrid $(CFLAGS) $(LDFLAGS) $(AOBJS) main.o $(SLAVE_OBJECTS) -o $@ -L. -lbwa $(LIBS)
 
 bwamem-lite:libbwa.a example.o
 		$(CC) $(CFLAGS) $(LDFLAGS) example.o -o $@ -L. -lbwa $(LIBS)

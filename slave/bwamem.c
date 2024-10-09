@@ -150,21 +150,86 @@ typedef struct {
 	bwtintv_v mem, mem1, *tmpv[2];
 } smem_aux_t;
 
+// TODO at least seq len
+#define ldm_malloc_tmp_size1 128
+#define ldm_malloc_tmp_size2 512
+
+//__thread_local_fix bwtintv_t tmpv0_fixed[ldm_malloc_tmp_size1];
+//__thread_local_fix bwtintv_t tmpv1_fixed[ldm_malloc_tmp_size1];
+//__thread_local_fix bwtintv_t mema_fixed[ldm_malloc_tmp_size2];
+//__thread_local_fix bwtintv_t mem1a_fixed[ldm_malloc_tmp_size2];
+
+
 static smem_aux_t *smem_aux_init()
 {
 	smem_aux_t *a;
-	a = calloc(1, sizeof(smem_aux_t));
-	a->tmpv[0] = calloc(1, sizeof(bwtintv_v));
-	a->tmpv[1] = calloc(1, sizeof(bwtintv_v));
+    //init version
+	//a = calloc(1, sizeof(smem_aux_t));
+	//a->tmpv[0] = calloc(1, sizeof(bwtintv_v));
+	//a->tmpv[1] = calloc(1, sizeof(bwtintv_v));
+
+
+    //ldm malloc version
+	a = ldm_malloc(sizeof(smem_aux_t));
+	a->tmpv[0] = ldm_malloc(sizeof(bwtintv_v));
+	a->tmpv[1] = ldm_malloc(sizeof(bwtintv_v));
+    a->tmpv[0]->n = 0;
+    a->tmpv[0]->m = ldm_malloc_tmp_size1;
+    a->tmpv[0]->a = ldm_malloc(ldm_malloc_tmp_size1 * sizeof(bwtintv_t));
+    a->tmpv[1]->n = 0;
+    a->tmpv[1]->m = ldm_malloc_tmp_size1;
+    a->tmpv[1]->a = ldm_malloc(ldm_malloc_tmp_size1 * sizeof(bwtintv_t));
+    a->mem.n = 0;
+    a->mem.m = ldm_malloc_tmp_size2;
+    a->mem.a = ldm_malloc(ldm_malloc_tmp_size2 * sizeof(bwtintv_t));
+    a->mem1.n = 0;
+    a->mem1.m = ldm_malloc_tmp_size2;
+    a->mem1.a = ldm_malloc(ldm_malloc_tmp_size2 * sizeof(bwtintv_t));
+
+
+    //global fix version
+	//a = ldm_malloc(sizeof(smem_aux_t));
+	//a->tmpv[0] = ldm_malloc(sizeof(bwtintv_v));
+	//a->tmpv[1] = ldm_malloc(sizeof(bwtintv_v));
+    //a->tmpv[0]->n = 0;
+    //a->tmpv[0]->m = ldm_malloc_tmp_size1;
+    //a->tmpv[0]->a = tmpv0_fixed;
+    //a->tmpv[1]->n = 0;
+    //a->tmpv[1]->m = ldm_malloc_tmp_size1;
+    //a->tmpv[1]->a = tmpv1_fixed;
+    //a->mem.n = 0;
+    //a->mem.m = ldm_malloc_tmp_size2;
+    //a->mem.a = mema_fixed;
+    //a->mem1.n = 0;
+    //a->mem1.m = ldm_malloc_tmp_size2;
+    //a->mem1.a = mem1a_fixed;
+
 	return a;
 }
 
 static void smem_aux_destroy(smem_aux_t *a)
 {	
-	free(a->tmpv[0]->a); free(a->tmpv[0]);
-	free(a->tmpv[1]->a); free(a->tmpv[1]);
-	free(a->mem.a); free(a->mem1.a);
-	free(a);
+    //init version
+    //free(a->tmpv[0]->a);
+    //free(a->tmpv[0]);
+	//free(a->tmpv[1]->a);
+    //free(a->tmpv[1]);
+	//free(a->mem.a); free(a->mem1.a);
+	//free(a);
+
+    //ldm free version
+    ldm_free(a->tmpv[0]->a, ldm_malloc_tmp_size1 * sizeof(bwtintv_t));
+    ldm_free(a->tmpv[0], sizeof(bwtintv_v));
+	ldm_free(a->tmpv[1]->a, ldm_malloc_tmp_size1 * sizeof(bwtintv_t));
+    ldm_free(a->tmpv[1], sizeof(bwtintv_v));
+	ldm_free(a->mem.a, ldm_malloc_tmp_size2 * sizeof(bwtintv_t));
+    ldm_free(a->mem1.a, ldm_malloc_tmp_size2 * sizeof(bwtintv_t));
+	ldm_free(a, sizeof(smem_aux_t));
+
+    //global fix version
+    //ldm_free(a->tmpv[0], sizeof(bwtintv_v));
+    //ldm_free(a->tmpv[1], sizeof(bwtintv_v));
+	//ldm_free(a, sizeof(smem_aux_t));
 }
 
 static void mem_collect_intv(const mem_opt_t *opt, const bwt_t *bwt, int len, const uint8_t *seq, smem_aux_t *a)
@@ -173,10 +238,14 @@ static void mem_collect_intv(const mem_opt_t *opt, const bwt_t *bwt, int len, co
 	int start_width = 1;
 	int split_len = (int)(opt->min_seed_len * opt->split_factor + .499);
 	a->mem.n = 0;
+
+    lwpf_start(l_collect_1);
 	// first pass: find all SMEMs
 	while (x < len) {
 		if (seq[x] < 4) {
+            lwpf_start(l_my_smem1);
 			x = bwt_smem1(bwt, len, seq, x, start_width, &a->mem1, a->tmpv);
+            lwpf_stop(l_my_smem1);
 			for (i = 0; i < a->mem1.n; ++i) {
 				bwtintv_t *p = &a->mem1.a[i];
 				int slen = (uint32_t)p->info - (p->info>>32); // seed length
@@ -185,17 +254,25 @@ static void mem_collect_intv(const mem_opt_t *opt, const bwt_t *bwt, int len, co
 			}
 		} else ++x;
 	}
+    lwpf_stop(l_collect_1);
+
+    lwpf_start(l_collect_2);
 	// second pass: find MEMs inside a long SMEM
 	old_n = a->mem.n;
 	for (k = 0; k < old_n; ++k) {
 		bwtintv_t *p = &a->mem.a[k];
 		int start = p->info>>32, end = (int32_t)p->info;
 		if (end - start < split_len || p->x[2] > opt->split_width) continue;
+        lwpf_start(l_my_smem2);
 		bwt_smem1(bwt, len, seq, (start + end)>>1, p->x[2]+1, &a->mem1, a->tmpv);
+        lwpf_stop(l_my_smem2);
 		for (i = 0; i < a->mem1.n; ++i)
 			if ((uint32_t)a->mem1.a[i].info - (a->mem1.a[i].info>>32) >= opt->min_seed_len)
 				kv_push(bwtintv_t, a->mem, a->mem1.a[i]);
 	}
+    lwpf_stop(l_collect_2);
+
+    lwpf_start(l_collect_3);
 	// third pass: LAST-like
 	if (opt->max_mem_intv > 0) {
 		x = 0;
@@ -203,7 +280,9 @@ static void mem_collect_intv(const mem_opt_t *opt, const bwt_t *bwt, int len, co
 			if (seq[x] < 4) {
 				if (1) {
 					bwtintv_t m;
+                    lwpf_start(l_my_seed_stra);
 					x = bwt_seed_strategy1(bwt, len, seq, x, opt->min_seed_len, opt->max_mem_intv, &m);
+                    lwpf_stop(l_my_seed_stra);
 					if (m.x[2] > 0) kv_push(bwtintv_t, a->mem, m);
 				} else { // for now, we never come to this block which is slower
 					x = bwt_smem1a(bwt, len, seq, x, start_width, opt->max_mem_intv, &a->mem1, a->tmpv);
@@ -213,8 +292,12 @@ static void mem_collect_intv(const mem_opt_t *opt, const bwt_t *bwt, int len, co
 			} else ++x;
 		}
 	}
+    lwpf_stop(l_collect_3);
+
+    lwpf_start(l_collect_4);
 	// sort
 	ks_introsort(mem_intv, a->mem.n, a->mem.a);
+    lwpf_stop(l_collect_4);
 }
 
 /************
@@ -307,12 +390,9 @@ void mem_print_chain(const bntseq_t *bns, mem_chain_v *chn)
 	}
 }
 
-int cnt = 0;
 
 mem_chain_v mem_chain(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bns, int len, const uint8_t *seq, void *buf)
 {
-    cnt++;
-    //fprintf(stderr, "cnt is %d\n", cnt);
 	int i, b, e, l_rep;
 	int64_t l_pac = bns->l_pac;
 	mem_chain_v chain;
@@ -325,9 +405,12 @@ mem_chain_v mem_chain(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 
 	aux = buf? (smem_aux_t*)buf : smem_aux_init();
     int max_s_size = opt->max_occ;
-    //fprintf(stderr, "before mem_collect_intv\n");
+
+    lwpf_start(l_collect_intv);
 	mem_collect_intv(opt, bwt, len, seq, aux);
-    //fprintf(stderr, "after mem_collect_intv\n");
+    lwpf_stop(l_collect_intv);
+
+    lwpf_start(l_my_cal_rep);
 	for (i = 0, b = e = l_rep = 0; i < aux->mem.n; ++i) { // compute frac_rep
 		bwtintv_t *p = &aux->mem.a[i];
         if(p->x[2] > max_s_size) max_s_size = p->x[2];
@@ -337,10 +420,10 @@ mem_chain_v mem_chain(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 		else e = e > se? e : se;
 	}
 	l_rep += e - b;
-    //fprintf(stderr, "before malloc %d\n", max_s_size);
-    //int64_t *rbegs = (int64_t*)malloc(max_s_size * sizeof(int64_t));
-    //fprintf(stderr, "after malloc\n");
-    //fprintf(stderr, "111\n");
+    lwpf_stop(l_my_cal_rep);
+
+
+    lwpf_start(l_my_btree_chain);
 	for (i = 0; i < aux->mem.n; ++i) {
 		bwtintv_t *p = &aux->mem.a[i];
 		int step, count, slen = (uint32_t)p->info - (p->info>>32); // seed length
@@ -351,43 +434,52 @@ mem_chain_v mem_chain(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 			mem_chain_t tmp, *lower, *upper;
 			mem_seed_t s;
 			int rid, to_add = 0;
+            lwpf_start(l_my_btree_sa);
 			s.rbeg = tmp.pos = bwt_sa(bwt, p->x[0] + k); // this is the base coordinate in the forward-reverse reference
+            lwpf_stop(l_my_btree_sa);
 			s.qbeg = p->info>>32;
 			s.score= s.len = slen;
+            lwpf_start(l_my_btree_rid);
 			rid = bns_intv2rid(bns, s.rbeg, s.rbeg + s.len);
+            lwpf_stop(l_my_btree_rid);
 			if (rid < 0) continue; // bridging multiple reference sequences or the forward-reverse boundary; TODO: split the seed; don't discard it!!!
 			if (kb_size(tree)) {
+                lwpf_start(l_my_btree_find);
 				kb_intervalp(chn, tree, &tmp, &lower, &upper); // find the closest chain
+                lwpf_stop(l_my_btree_find);
+
+                lwpf_start(l_my_btree_merge);
 				if (!lower || !test_and_merge(opt, l_pac, lower, &s, rid)) to_add = 1;
+                lwpf_stop(l_my_btree_merge);
 			} else to_add = 1;
 			if (to_add) { // add the seed as a new chain
+                lwpf_start(l_my_btree_add);
 				tmp.n = 1; tmp.m = 4;
 				tmp.seeds = calloc(tmp.m, sizeof(mem_seed_t));
 				tmp.seeds[0] = s;
 				tmp.rid = rid;
 				tmp.is_alt = !!bns->anns[rid].is_alt;
 				kb_putp(chn, tree, &tmp);
+                lwpf_stop(l_my_btree_add);
 			}
 		}
 	}
-    //free(rbegs);
-    //fprintf(stderr, "111\n");
+    lwpf_stop(l_my_btree_chain);
+
+    lwpf_start(l_my_btree_free);
 	if (buf == 0) smem_aux_destroy(aux);
 
-    //fprintf(stderr, "111\n");
 	kv_resize(mem_chain_t, chain, kb_size(tree));
 
-    //fprintf(stderr, "111\n");
 	#define traverse_func(p_) (chain.a[chain.n++] = *(p_))
 	__kb_traverse(mem_chain_t, tree, traverse_func);
 	#undef traverse_func
 
-    //fprintf(stderr, "111\n");
 	for (i = 0; i < chain.n; ++i) chain.a[i].frac_rep = (float)l_rep / len;
 	if (bwa_verbose >= 4) printf("* fraction of repetitive seeds: %.3f\n", (float)l_rep / len);
 
 	kb_destroy(chn, tree);
-    //fprintf(stderr, "111\n");
+    lwpf_stop(l_my_btree_free);
 	return chain;
 }
 
@@ -1152,11 +1244,21 @@ mem_alnreg_v mem_align1_core(int id, const mem_opt_t *opt, const bwt_t *bwt, con
 	for (i = 0; i < l_seq; ++i) // convert to 2-bit encoding if we have not done so
 		seq[i] = seq[i] < 4? seq[i] : nst_nt4_table[(int)seq[i]];
 
+    lwpf_start(l_mem_chain);
 	chn = mem_chain(opt, bwt, bns, l_seq, (uint8_t*)seq, buf);
+    lwpf_stop(l_mem_chain);
+
+    lwpf_start(l_mem_chain_flt);
 	chn.n = mem_chain_flt(opt, chn.n, chn.a);
+    lwpf_stop(l_mem_chain_flt);
+
+    lwpf_start(l_mem_flt_chained_seeds);
 	mem_flt_chained_seeds(opt, bns, pac, l_seq, (uint8_t*)seq, chn.n, chn.a);
+    lwpf_stop(l_mem_flt_chained_seeds);
 	if (bwa_verbose >= 4) mem_print_chain(bns, &chn);
 
+
+    lwpf_start(l_mem_chain2aln);
 	kv_init(regs);
 	for (i = 0; i < chn.n; ++i) {
 		mem_chain_t *p = &chn.a[i];
@@ -1164,9 +1266,12 @@ mem_alnreg_v mem_align1_core(int id, const mem_opt_t *opt, const bwt_t *bwt, con
 		mem_chain2aln(opt, bns, pac, l_seq, (uint8_t*)seq, p, &regs);
 		free(chn.a[i].seeds);
 	}
+    lwpf_stop(l_mem_chain2aln);
 	free(chn.a);
 
+    lwpf_start(l_mem_sort_dedup_patch1);
 	regs.n = mem_sort_dedup_patch(opt, bns, pac, (uint8_t*)seq, regs.n, regs.a);
+    lwpf_stop(l_mem_sort_dedup_patch1);
 
 	if (bwa_verbose >= 4) {
 		err_printf("* %ld chains remain after removing duplicated chains\n", regs.n);

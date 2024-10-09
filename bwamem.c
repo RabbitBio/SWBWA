@@ -75,12 +75,18 @@ static const bntseq_t *global_bns = 0; // for debugging only
 
 extern double t_work1;
 extern double t_work2;
+
+extern double t_work1_1;
+extern double t_work1_2;
+extern double t_work1_3;
+extern double t_work1_4;
+extern double t_work1_5;
+extern double t_work1_6;
+
+
 extern double t_work2_1;
 extern double t_work2_2;
 extern double t_work2_3;
-
-extern double t_work1_3;
-extern double t_work1_3_1;
 
 
 extern long long s_reg_sum;
@@ -90,8 +96,6 @@ extern long long s_px2;
 
 
 #define bwt_sa_slave
-
-#define worker1_one_time
 
 #define bwt_sa_slave2
 extern void SLAVE_FUN(worker1_s_init());
@@ -1319,20 +1323,26 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 
     long nn = (opt->flag&MEM_F_PE)? n>>1 : n;
     double t0 = GetTime();
+    double tt0;
 #ifdef bwt_sa_slave
-# ifdef worker1_one_time
-    athread_init();
+    tt0 = GetTime();
+    //athread_init();
     c_px2++;
     s_px2 += nn;
     Para_worker1_s para;
     para.nn = nn;
     para.data = (void*)&w;
     para.cpe_regs = (mem_alnreg_v*)malloc(n * sizeof(mem_alnreg_v));
+    t_work1_1 += GetTime() - tt0;
 
+
+    tt0 = GetTime();
     __real_athread_spawn((void*)slave_worker1_s_pre_fast, &para, 1);
     athread_join();
-      
     fprintf(stderr, "slave pre done\n");
+    t_work1_2 += GetTime() - tt0;
+      
+    tt0 = GetTime();
     for(int i = 0; i < n; i++) {
         w.regs[i].m = para.cpe_regs[i].n;
         w.regs[i].a = malloc(sizeof(mem_alnreg_t) * w.regs[i].m);
@@ -1342,48 +1352,18 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
         }
         w.regs[i].n = 0;
     }
+    t_work1_3 += GetTime() - tt0;
 
+    tt0 = GetTime();
     __real_athread_spawn((void*)slave_worker1_s_fast, &para, 1);
     athread_join();
-    
     fprintf(stderr, "slave round done\n");
+    t_work1_4 += GetTime() - tt0;
 
-    athread_halt();
-
+    tt0 = GetTime();
+    //athread_halt();
     free(para.cpe_regs);
-
-# else
-    athread_init();
-    c_px2++;
-    s_px2 += nn;
-    Para_worker1_s para;
-    para.nn = nn;
-    para.data = (void*)&w;
-    para.real_sizes = (int*)malloc(n * sizeof(int));
-
-    __real_athread_spawn((void*)slave_worker1_s_pre, &para, 1);
-    athread_join();
-      
-    fprintf(stderr, "slave pre done\n");
-    for(int i = 0; i < n; i++) {
-        w.regs[i].m = para.real_sizes[i];
-        w.regs[i].a = malloc(sizeof(mem_alnreg_t) * w.regs[i].m);
-        if(w.regs[i].a == NULL) {
-            fprintf(stderr, "GG malloc %d null\n", para.real_sizes[i]);
-            exit(0);
-        }
-        w.regs[i].n = 0;
-    }
-
-    __real_athread_spawn((void*)slave_worker1_s, &para, 1);
-    athread_join();
-    
-    fprintf(stderr, "slave round done\n");
-
-    athread_halt();
-
-    free(para.real_sizes);
-# endif
+    t_work1_5 += GetTime() - tt0;
 
 #else
     for(int i = 0; i < nn; i++) {
@@ -1394,18 +1374,21 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 
 	//for (int i = 0; i < 64; ++i)
 	//	smem_aux_destroy(w.aux[i]);
+
+    tt0 = GetTime();
 	free(w.aux);
 	if (opt->flag&MEM_F_PE) { // infer insert sizes if not provided
 		if (pes0) memcpy(pes, pes0, 4 * sizeof(mem_pestat_t));
 		else mem_pestat(opt, bns->l_pac, n, w.regs, pes);
 	}
+    t_work1_6 += GetTime() - tt0;
     t_work1 += GetTime() - t0;
 
     t0 = GetTime();
 #ifdef bwt_sa_slave2
 
-    double tt0 = GetTime();
-    athread_init();
+    double tt1 = GetTime();
+    //athread_init();
     Para_worker2_s para2;
     para2.nn = nn;
     para2.data = (void*)&w;
@@ -1428,19 +1411,19 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
         w.seqs[i].sam = const_sams[i];
         w.seqs[i].sam[(w.seqs[i].l_seq << 6)] = '\0';
     }
-    t_work2_1 += GetTime() - tt0;
+    t_work2_1 += GetTime() - tt1;
 
-    tt0 = GetTime();
+    tt1 = GetTime();
     __real_athread_spawn((void*)slave_worker2_s, &para2, 1);
     athread_join();
-    athread_halt();
-    t_work2_2 += GetTime() - tt0;
+    //athread_halt();
+    t_work2_2 += GetTime() - tt1;
 
-    tt0 = GetTime();
+    tt1 = GetTime();
     for(int i = 0; i < n; i++) {
         free(w.regs[i].a);
     }
-    t_work2_3 += GetTime() - tt0;
+    t_work2_3 += GetTime() - tt1;
 #else
     for(int i = 0; i < nn; i++) {
         worker2(&w, i, i % 64);

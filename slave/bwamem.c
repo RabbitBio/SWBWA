@@ -259,44 +259,70 @@ static void mem_collect_intv(const mem_opt_t *opt, const bwt_t *bwt, int len, co
     lwpf_start(l_collect_2);
 	// second pass: find MEMs inside a long SMEM
 	old_n = a->mem.n;
-	for (k = 0; k < old_n; ++k) {
-		bwtintv_t *p = &a->mem.a[k];
-		int start = p->info>>32, end = (int32_t)p->info;
-		if (end - start < split_len || p->x[2] > opt->split_width) continue;
+//#define use_2_pass_batch
+#define bs_2_pass 8
+
+#ifdef use_2_pass_batch
+    int b_x[old_n];
+    int b_min_intv[old_n];
+    int cnt_2_pass = 0;
+    for (k = 0; k < old_n; k++) {
+        bwtintv_t *p = &a->mem.a[k];
+        int start = p->info>>32, end = (int32_t)p->info;
+        if (end - start < split_len || p->x[2] > opt->split_width) continue;
+        if(seq[(start + end)>>1] > 3) continue;
+        b_x[cnt_2_pass] = (start + end)>>1;
+        b_min_intv[cnt_2_pass++] = p->x[2]+1;
+    }
+    for (k = 0; k < cnt_2_pass; k += bs_2_pass) {
+        int cnt_now = cnt_2_pass - k >= bs_2_pass ? bs_2_pass: cnt_2_pass - k;
         lwpf_start(l_my_smem2);
-		bwt_smem1(bwt, len, seq, (start + end)>>1, p->x[2]+1, &a->mem1, a->tmpv);
+        bwt_smem1_batch(cnt_now, bwt, len, seq, b_x + k, b_min_intv + k, &a->mem1);
+        for (i = 0; i < a->mem1.n; ++i)
+            if ((uint32_t)a->mem1.a[i].info - (a->mem1.a[i].info>>32) >= opt->min_seed_len)
+                kv_push(bwtintv_t, a->mem, a->mem1.a[i]);
         lwpf_stop(l_my_smem2);
-		for (i = 0; i < a->mem1.n; ++i)
-			if ((uint32_t)a->mem1.a[i].info - (a->mem1.a[i].info>>32) >= opt->min_seed_len)
-				kv_push(bwtintv_t, a->mem, a->mem1.a[i]);
-	}
+    }
+#else
+    for (k = 0; k < old_n; ++k) {
+        bwtintv_t *p = &a->mem.a[k];
+        int start = p->info>>32, end = (int32_t)p->info;
+        if (end - start < split_len || p->x[2] > opt->split_width) continue;
+        lwpf_start(l_my_smem2);
+        bwt_smem1(bwt, len, seq, (start + end)>>1, p->x[2]+1, &a->mem1, a->tmpv);
+        lwpf_stop(l_my_smem2);
+        for (i = 0; i < a->mem1.n; ++i)
+            if ((uint32_t)a->mem1.a[i].info - (a->mem1.a[i].info>>32) >= opt->min_seed_len)
+                kv_push(bwtintv_t, a->mem, a->mem1.a[i]);
+    }
+#endif
     lwpf_stop(l_collect_2);
 
     lwpf_start(l_collect_3);
-	// third pass: LAST-like
-	if (opt->max_mem_intv > 0) {
-		x = 0;
-		while (x < len) {
-			if (seq[x] < 4) {
-				if (1) {
-					bwtintv_t m;
+    // third pass: LAST-like
+    if (opt->max_mem_intv > 0) {
+        x = 0;
+        while (x < len) {
+            if (seq[x] < 4) {
+                if (1) {
+                    bwtintv_t m;
                     lwpf_start(l_my_seed_stra);
-					x = bwt_seed_strategy1(bwt, len, seq, x, opt->min_seed_len, opt->max_mem_intv, &m);
+                    x = bwt_seed_strategy1(bwt, len, seq, x, opt->min_seed_len, opt->max_mem_intv, &m);
                     lwpf_stop(l_my_seed_stra);
-					if (m.x[2] > 0) kv_push(bwtintv_t, a->mem, m);
-				} else { // for now, we never come to this block which is slower
-					x = bwt_smem1a(bwt, len, seq, x, start_width, opt->max_mem_intv, &a->mem1, a->tmpv);
-					for (i = 0; i < a->mem1.n; ++i)
-						kv_push(bwtintv_t, a->mem, a->mem1.a[i]);
-				}
-			} else ++x;
-		}
-	}
+                    if (m.x[2] > 0) kv_push(bwtintv_t, a->mem, m);
+                } else { // for now, we never come to this block which is slower
+                    x = bwt_smem1a(bwt, len, seq, x, start_width, opt->max_mem_intv, &a->mem1, a->tmpv);
+                    for (i = 0; i < a->mem1.n; ++i)
+                        kv_push(bwtintv_t, a->mem, a->mem1.a[i]);
+                }
+            } else ++x;
+        }
+    }
     lwpf_stop(l_collect_3);
 
     lwpf_start(l_collect_4);
-	// sort
-	ks_introsort(mem_intv, a->mem.n, a->mem.a);
+    // sort
+    ks_introsort(mem_intv, a->mem.n, a->mem.a);
     lwpf_stop(l_collect_4);
 }
 
@@ -305,20 +331,20 @@ static void mem_collect_intv(const mem_opt_t *opt, const bwt_t *bwt, int len, co
  ************/
 
 typedef struct {
-	int64_t rbeg;
-	int32_t qbeg, len;
-	int score;
+    int64_t rbeg;
+    int32_t qbeg, len;
+    int score;
 } mem_seed_t; // unaligned memory
 
 typedef struct {
-	int n, m, first, rid;
-	uint32_t w:29, kept:2, is_alt:1;
-	//uint32_t w;
+    int n, m, first, rid;
+    uint32_t w:29, kept:2, is_alt:1;
+    //uint32_t w;
     //uint32_t kept;
     //uint32_t is_alt;
-	float frac_rep;
-	int64_t pos;
-	mem_seed_t *seeds;
+    float frac_rep;
+    int64_t pos;
+    mem_seed_t *seeds;
 } mem_chain_t;
 
 typedef struct { size_t n, m; mem_chain_t *a;  } mem_chain_v;
@@ -328,96 +354,96 @@ typedef struct { size_t n, m; mem_chain_t *a;  } mem_chain_v;
 #define chain_cmp(a, b) (((b).pos < (a).pos) - ((a).pos < (b).pos))
 KBTREE_INIT(chn, mem_chain_t, chain_cmp)
 
-// return 1 if the seed is merged into the chain
+    // return 1 if the seed is merged into the chain
 static int test_and_merge(const mem_opt_t *opt, int64_t l_pac, mem_chain_t *c, const mem_seed_t *p, int seed_rid)
 {
-	int64_t qend, rend, x, y;
-	const mem_seed_t *last = &c->seeds[c->n-1];
-	qend = last->qbeg + last->len;
-	rend = last->rbeg + last->len;
-	if (seed_rid != c->rid) return 0; // different chr; request a new chain
-	if (p->qbeg >= c->seeds[0].qbeg && p->qbeg + p->len <= qend && p->rbeg >= c->seeds[0].rbeg && p->rbeg + p->len <= rend)
-		return 1; // contained seed; do nothing
-	if ((last->rbeg < l_pac || c->seeds[0].rbeg < l_pac) && p->rbeg >= l_pac) return 0; // don't chain if on different strand
-	x = p->qbeg - last->qbeg; // always non-negtive
-	y = p->rbeg - last->rbeg;
-	if (y >= 0 && x - y <= opt->w && y - x <= opt->w && x - last->len < opt->max_chain_gap && y - last->len < opt->max_chain_gap) { // grow the chain
-		if (c->n == c->m) {
-			c->m <<= 1;
-			c->seeds = realloc(c->seeds, c->m * sizeof(mem_seed_t));
-		}
-		c->seeds[c->n++] = *p;
-		return 1;
-	}
-	return 0; // request to add a new chain
+    int64_t qend, rend, x, y;
+    const mem_seed_t *last = &c->seeds[c->n-1];
+    qend = last->qbeg + last->len;
+    rend = last->rbeg + last->len;
+    if (seed_rid != c->rid) return 0; // different chr; request a new chain
+    if (p->qbeg >= c->seeds[0].qbeg && p->qbeg + p->len <= qend && p->rbeg >= c->seeds[0].rbeg && p->rbeg + p->len <= rend)
+        return 1; // contained seed; do nothing
+    if ((last->rbeg < l_pac || c->seeds[0].rbeg < l_pac) && p->rbeg >= l_pac) return 0; // don't chain if on different strand
+    x = p->qbeg - last->qbeg; // always non-negtive
+    y = p->rbeg - last->rbeg;
+    if (y >= 0 && x - y <= opt->w && y - x <= opt->w && x - last->len < opt->max_chain_gap && y - last->len < opt->max_chain_gap) { // grow the chain
+        if (c->n == c->m) {
+            c->m <<= 1;
+            c->seeds = realloc(c->seeds, c->m * sizeof(mem_seed_t));
+        }
+        c->seeds[c->n++] = *p;
+        return 1;
+    }
+    return 0; // request to add a new chain
 }
 
 int mem_chain_weight(const mem_chain_t *c)
 {
-	int64_t end;
-	int j, w = 0, tmp;
-	for (j = 0, end = 0; j < c->n; ++j) {
-		const mem_seed_t *s = &c->seeds[j];
-		if (s->qbeg >= end) w += s->len;
-		else if (s->qbeg + s->len > end) w += s->qbeg + s->len - end;
-		end = end > s->qbeg + s->len? end : s->qbeg + s->len;
-	}
-	tmp = w; w = 0;
-	for (j = 0, end = 0; j < c->n; ++j) {
-		const mem_seed_t *s = &c->seeds[j];
-		if (s->rbeg >= end) w += s->len;
-		else if (s->rbeg + s->len > end) w += s->rbeg + s->len - end;
-		end = end > s->rbeg + s->len? end : s->rbeg + s->len;
-	}
-	w = w < tmp? w : tmp;
-	return w < 1<<30? w : (1<<30)-1;
+    int64_t end;
+    int j, w = 0, tmp;
+    for (j = 0, end = 0; j < c->n; ++j) {
+        const mem_seed_t *s = &c->seeds[j];
+        if (s->qbeg >= end) w += s->len;
+        else if (s->qbeg + s->len > end) w += s->qbeg + s->len - end;
+        end = end > s->qbeg + s->len? end : s->qbeg + s->len;
+    }
+    tmp = w; w = 0;
+    for (j = 0, end = 0; j < c->n; ++j) {
+        const mem_seed_t *s = &c->seeds[j];
+        if (s->rbeg >= end) w += s->len;
+        else if (s->rbeg + s->len > end) w += s->rbeg + s->len - end;
+        end = end > s->rbeg + s->len? end : s->rbeg + s->len;
+    }
+    w = w < tmp? w : tmp;
+    return w < 1<<30? w : (1<<30)-1;
 }
 
 void mem_print_chain(const bntseq_t *bns, mem_chain_v *chn)
 {
-	int i, j;
-	for (i = 0; i < chn->n; ++i) {
-		mem_chain_t *p = &chn->a[i];
-		err_printf("* Found CHAIN(%d): n=%d; weight=%d", i, p->n, mem_chain_weight(p));
-		for (j = 0; j < p->n; ++j) {
-			bwtint_t pos;
-			int is_rev;
-			pos = bns_depos(bns, p->seeds[j].rbeg, &is_rev);
-			if (is_rev) pos -= p->seeds[j].len - 1;
-			err_printf("\t%d;%d;%d,%ld(%s:%c%ld)", p->seeds[j].score, p->seeds[j].len, p->seeds[j].qbeg, (long)p->seeds[j].rbeg, bns->anns[p->rid].name, "+-"[is_rev], (long)(pos - bns->anns[p->rid].offset) + 1);
-		}
-		err_putchar('\n');
-	}
+    int i, j;
+    for (i = 0; i < chn->n; ++i) {
+        mem_chain_t *p = &chn->a[i];
+        err_printf("* Found CHAIN(%d): n=%d; weight=%d", i, p->n, mem_chain_weight(p));
+        for (j = 0; j < p->n; ++j) {
+            bwtint_t pos;
+            int is_rev;
+            pos = bns_depos(bns, p->seeds[j].rbeg, &is_rev);
+            if (is_rev) pos -= p->seeds[j].len - 1;
+            err_printf("\t%d;%d;%d,%ld(%s:%c%ld)", p->seeds[j].score, p->seeds[j].len, p->seeds[j].qbeg, (long)p->seeds[j].rbeg, bns->anns[p->rid].name, "+-"[is_rev], (long)(pos - bns->anns[p->rid].offset) + 1);
+        }
+        err_putchar('\n');
+    }
 }
 
 
 mem_chain_v mem_chain(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bns, int len, const uint8_t *seq, void *buf)
 {
-	int i, b, e, l_rep;
-	int64_t l_pac = bns->l_pac;
-	mem_chain_v chain;
-	kbtree_t(chn) *tree;
-	smem_aux_t *aux;
+    int i, b, e, l_rep;
+    int64_t l_pac = bns->l_pac;
+    mem_chain_v chain;
+    kbtree_t(chn) *tree;
+    smem_aux_t *aux;
 
-	kv_init(chain);
-	if (len < opt->min_seed_len) return chain; // if the query is shorter than the seed length, no match
-	tree = kb_init(chn, KB_DEFAULT_SIZE);
+    kv_init(chain);
+    if (len < opt->min_seed_len) return chain; // if the query is shorter than the seed length, no match
+    tree = kb_init(chn, KB_DEFAULT_SIZE);
 
-	aux = buf? (smem_aux_t*)buf : smem_aux_init();
+    aux = buf? (smem_aux_t*)buf : smem_aux_init();
     int max_s_size = opt->max_occ;
 
     lwpf_start(l_collect_intv);
-	mem_collect_intv(opt, bwt, len, seq, aux);
+    mem_collect_intv(opt, bwt, len, seq, aux);
     lwpf_stop(l_collect_intv);
 
     lwpf_start(l_my_cal_rep);
-	for (i = 0, b = e = l_rep = 0; i < aux->mem.n; ++i) { // compute frac_rep
-		bwtintv_t *p = &aux->mem.a[i];
+    for (i = 0, b = e = l_rep = 0; i < aux->mem.n; ++i) { // compute frac_rep
+        bwtintv_t *p = &aux->mem.a[i];
         if(p->x[2] > max_s_size) max_s_size = p->x[2];
-		int sb = (p->info>>32), se = (uint32_t)p->info;
-		if (p->x[2] <= opt->max_occ) continue;
-		if (sb > e) l_rep += e - b, b = sb, e = se;
-		else e = e > se? e : se;
+        int sb = (p->info>>32), se = (uint32_t)p->info;
+        if (p->x[2] <= opt->max_occ) continue;
+        if (sb > e) l_rep += e - b, b = sb, e = se;
+        else e = e > se? e : se;
 	}
 	l_rep += e - b;
     lwpf_stop(l_my_cal_rep);
@@ -1235,8 +1261,18 @@ void mem_reg2sam(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, 
 	}
 }
 
-mem_alnreg_v mem_align1_core(int id, const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bns, const uint8_t *pac, int l_seq, char *seq, void *buf)
+mem_alnreg_v mem_align1_core(int id, const mem_opt_t *opt, const bwt_t *init_bwt, const bntseq_t *bns, const uint8_t *pac, int l_seq, char *seq, void *buf)
 {
+
+
+    bwt_t *bwt = ldm_malloc(sizeof(bwt_t));
+    *bwt = *init_bwt;
+    memcpy(bwt->L2, init_bwt->L2, sizeof(bwtint_t) * 5);
+    memcpy(bwt->cnt_table, init_bwt->cnt_table, sizeof(uint32_t) * 256);
+
+    //static int cntt = 0;
+    //cntt++;
+    //if(cntt < 10 && _PEN == 0) fprintf(stderr, "slave %d, L2 addr %p\n", _PEN, bwt->L2);
 	int i;
 	mem_chain_v chn;
 	mem_alnreg_v regs;
@@ -1286,15 +1322,7 @@ mem_alnreg_v mem_align1_core(int id, const mem_opt_t *opt, const bwt_t *bwt, con
 			p->is_alt = 1;
 	}
 
-    //char filename[50];
-    //sprintf(filename, "%d_info1.log", id);
-    //FILE *file1 = fopen(filename, "w");
-    //fprintf(file1, "reg size %d\n", regs.n);
-    //for(int j = 0; j < regs.n; j++) {
-    //    fprintf(file1, "%lld %lld\n", regs.a[j].rb, regs.a[j].re);
-    //}
-    //fclose(file1);
-
+    ldm_free(bwt, sizeof(bwt_t));
 	return regs;
 }
 

@@ -117,61 +117,104 @@ static inline int __occ_aux(uint64_t y, int c)
 	return ((y + (y >> 4)) & 0xf0f0f0f0f0f0f0full) * 0x101010101010101ull >> 56;
 }
 
+
+volatile __thread_local int reply;
+__thread_local_fix uint32_t p_tmp[16];
 bwtint_t bwt_occ(const bwt_t *bwt, bwtint_t k, ubyte_t c)
 {
-	bwtint_t n;
+	bwtint_t n1, n2 = 0;
 	uint32_t *p, *end;
 
 	if (k == bwt->seq_len) return bwt->L2[c+1] - bwt->L2[c];
 	if (k == (bwtint_t)(-1)) return 0;
 	k -= (k >= bwt->primary); // because $ is not in bwt
 
+    //lwpf_start(l_my_2ooc1);
 	// retrieve Occ at k/OCC_INTERVAL
-	n = ((bwtint_t*)(p = bwt_occ_intv(bwt, k)))[c];
-	p += sizeof(bwtint_t); // jump to the start of the first BWT cell
+    //reply=0;
+    //athread_dma_iget(&n1, ((bwtint_t*)bwt_occ_intv(bwt, k)) + c, sizeof(bwtint_t), &reply);
+    //assert(n == ((bwtint_t*)bwt_occ_intv(bwt, k))[c]);
+    n1 = ((bwtint_t*)bwt_occ_intv(bwt, k))[c];
 
+    //int p_size = (((k>>5) - ((k&~OCC_INTV_MASK)>>5))<<1) * sizeof(uint32_t);
+    //p_size += 2 * sizeof(uint32_t);
+    //assert(p_size <= 40);
+    //lwpf_stop(l_my_2ooc1);
+
+    //lwpf_start(l_my_2ooc2);
+    p = bwt_occ_intv(bwt, k) + sizeof(bwtint_t);
+    //p = p_tmp;
+    //athread_dma_get(p, bwt_occ_intv(bwt, k) + sizeof(bwtint_t), p_size);
+
+    //uint32_t *pp = p;
 	// calculate Occ up to the last k/32
 	end = p + (((k>>5) - ((k&~OCC_INTV_MASK)>>5))<<1);
-	for (; p < end; p += 2) n += __occ_aux((uint64_t)p[0]<<32 | p[1], c);
+	for (; p < end; p += 2) n2 += __occ_aux((uint64_t)p[0]<<32 | p[1], c);
 
 	// calculate Occ
-	n += __occ_aux(((uint64_t)p[0]<<32 | p[1]) & ~((1ull<<((~k&31)<<1)) - 1), c);
-	if (c == 0) n -= ~k&31; // corrected for the masked bits
+	n2 += __occ_aux(((uint64_t)p[0]<<32 | p[1]) & ~((1ull<<((~k&31)<<1)) - 1), c);
+	if (c == 0) n2 -= ~k&31; // corrected for the masked bits
 
-	return n;
+    //assert((p + 2 - pp) * sizeof(uint32_t) <= p_size);
+    //lwpf_stop(l_my_2ooc2);
+    //athread_dma_wait_value(&reply,1);
+	return n1 + n2;
 }
 
 // an analogy to bwt_occ() but more efficient, requiring k <= l
 void bwt_2occ(const bwt_t *bwt, bwtint_t k, bwtint_t l, ubyte_t c, bwtint_t *ok, bwtint_t *ol)
 {
+
+
 	bwtint_t _k, _l;
 	_k = (k >= bwt->primary)? k-1 : k;
 	_l = (l >= bwt->primary)? l-1 : l;
 	if (_l/OCC_INTERVAL != _k/OCC_INTERVAL || k == (bwtint_t)(-1) || l == (bwtint_t)(-1)) {
+	//if (1) {
 		*ok = bwt_occ(bwt, k, c);
 		*ol = bwt_occ(bwt, l, c);
 	} else {
-		bwtint_t m, n, i, j;
+		bwtint_t m1, m2 = 0, n1, n2 = 0, i, j;
 		uint32_t *p;
+        
 		if (k >= bwt->primary) --k;
 		if (l >= bwt->primary) --l;
-		n = ((bwtint_t*)(p = bwt_occ_intv(bwt, k)))[c];
-		p += sizeof(bwtint_t);
+
+        //lwpf_start(l_my_2ooc3);
+        //reply=0;
+        //athread_dma_iget(&n1, ((bwtint_t*)bwt_occ_intv(bwt, k)) + c, sizeof(bwtint_t), &reply);
+        //assert(n == ((bwtint_t*)bwt_occ_intv(bwt, k))[c]);
+        n1 = ((bwtint_t*)bwt_occ_intv(bwt, k))[c];
+
+        //int p_size = (((l>>5) - ((k&~OCC_INTV_MASK)>>5))<<1) * sizeof(uint32_t);
+        //p_size += 2 * sizeof(uint32_t);
+        //assert(p_size <= 40);
+        //lwpf_stop(l_my_2ooc3);
+
+        //lwpf_start(l_my_2ooc4);
+        p = bwt_occ_intv(bwt, k) + sizeof(bwtint_t);
+        //p = p_tmp;
+        //athread_dma_get(p, bwt_occ_intv(bwt, k) + sizeof(bwtint_t), p_size);
 		// calculate *ok
+        //uint32_t *pp = p;
 		j = k >> 5 << 5;
-		for (i = k/OCC_INTERVAL*OCC_INTERVAL; i < j; i += 32, p += 2)
-			n += __occ_aux((uint64_t)p[0]<<32 | p[1], c);
-		m = n;
-		n += __occ_aux(((uint64_t)p[0]<<32 | p[1]) & ~((1ull<<((~k&31)<<1)) - 1), c);
-		if (c == 0) n -= ~k&31; // corrected for the masked bits
-		*ok = n;
+		for (i = k/OCC_INTERVAL*OCC_INTERVAL; i < j; i += 32, p += 2) {
+			n2 += __occ_aux((uint64_t)p[0]<<32 | p[1], c);
+        }
+		m1 = n2;
+		n2 += __occ_aux(((uint64_t)p[0]<<32 | p[1]) & ~((1ull<<((~k&31)<<1)) - 1), c);
+		if (c == 0) n2 -= ~k&31; // corrected for the masked bits
 		// calculate *ol
 		j = l >> 5 << 5;
 		for (; i < j; i += 32, p += 2)
-			m += __occ_aux((uint64_t)p[0]<<32 | p[1], c);
-		m += __occ_aux(((uint64_t)p[0]<<32 | p[1]) & ~((1ull<<((~l&31)<<1)) - 1), c);
-		if (c == 0) m -= ~l&31; // corrected for the masked bits
-		*ol = m;
+			m2 += __occ_aux((uint64_t)p[0]<<32 | p[1], c);
+		m2 += __occ_aux(((uint64_t)p[0]<<32 | p[1]) & ~((1ull<<((~l&31)<<1)) - 1), c);
+		if (c == 0) m2 -= ~l&31; // corrected for the masked bits
+        //athread_dma_wait_value(&reply,1);
+		*ok = n1 + n2;
+		*ol = n1 + m1 + m2;
+        //assert((p + 2 - pp) * sizeof(uint32_t) <= p_size);
+        //lwpf_stop(l_my_2ooc4);
 	}
 }
 
@@ -344,6 +387,136 @@ static void bwt_reverse_intvs(bwtintv_v *p)
 	}
 }
 
+
+
+#ifdef use_2_pass_batch
+__thread_local_fix bwtintv_t p1[8][128];
+__thread_local_fix bwtintv_t p2[8][128];
+
+void bwt_smem1a_batch(int bs, const bwt_t *bwt, int len, const uint8_t *q, int *b_x, int *b_min_intv, uint64_t max_intv, bwtintv_v *mem)
+{
+	bwtintv_t b_ik[bs];
+	bwtintv_v *b_prev[bs], *b_curr[bs], *b_swap[bs];
+    assert(bs <= 8);
+    for(int id = 0; id < bs; id++) {
+        b_prev[id] = p1[id];
+        b_curr[id] = p2[id];
+    }
+
+
+    lwpf_start(l_forward_batch);
+
+	for(int id = 0; id < bs; id++) if (b_min_intv[id] < 1) b_min_intv[id] = 1; // the interval size should be at least 1
+
+    for(int id = 0; id < bs; id++) {
+        bwt_set_intv(bwt, q[b_x[id]], b_ik[id]); // the initial interval of a single base
+        b_ik[id].info = b_x[id] + 1;
+    }
+
+    for(int id = 0; id < bs; id++) {
+    //for(int id = bs - 1; id >= 0; id--) {
+        bwtintv_v *prev = b_prev[id];
+        bwtintv_v *curr = b_curr[id];
+        bwtintv_v *swap = b_swap[id];
+
+        bwtintv_t ik = b_ik[id];
+        bwtintv_t ok[4];
+        int c, i, j;
+        int x = b_x[id];
+        int ret;
+        int min_intv = b_min_intv[id];
+        for (i = x + 1, curr->n = 0; i < len; ++i) { // forward search
+            if (ik.x[2] < max_intv) { // an interval small enough
+                kv_push(bwtintv_t, *curr, ik);
+                break;
+            } else if (q[i] < 4) { // an A/C/G/T base
+                c = 3 - q[i]; // complement of q[i]
+                //bwt_extend(bwt, &ik, ok, 0);
+                bwt_extend_backward_base(bwt, &ik, ok, c);
+                if (ok[c].x[2] != ik.x[2]) { // change of the interval size
+                    kv_push(bwtintv_t, *curr, ik);
+                    if (ok[c].x[2] < min_intv) {
+                        break; // the interval size is too small to be extended further
+                    }
+                }
+                ik = ok[c]; ik.info = i + 1;
+#ifdef use_my_prefetch
+                bwtint_t k1 = ok[c].x[0] - 1;
+                if(k1 != -1) __builtin_prefetch(bwt_occ_intv(bwt, k1 - (k1 >= bwt->primary)), 0, 3);
+                bwtint_t l1 = ok[c].x[0] - 1 + ok[c].x[2];
+                if(l1 != -1) __builtin_prefetch(bwt_occ_intv(bwt, l1 - (l1 >= bwt->primary)), 0, 3);
+                bwtint_t k2 = ok[c].x[1] - 1;
+                if(k2 != -1) __builtin_prefetch(bwt_occ_intv(bwt, k2 - (k2 >= bwt->primary)), 0, 3);
+                bwtint_t l2 = ok[c].x[1] - 1 + ok[c].x[2];
+                if(l2 != -1) __builtin_prefetch(bwt_occ_intv(bwt, l2 - (l2 >= bwt->primary)), 0, 3);
+#endif
+            } else { // an ambiguous base
+                kv_push(bwtintv_t, *curr, ik);
+                break; // always terminate extension at an ambiguous base; in this case, i<len always stands
+            }
+        }
+        if (i == len) kv_push(bwtintv_t, *curr, ik); // push the last interval if we reach the end
+        bwt_reverse_intvs(curr); // s.t. smaller intervals (i.e. longer matches) visited first
+        ret = curr->a[0].info; // this will be the returned value
+        swap = curr; curr = prev; prev = swap;
+
+
+        b_ik[id] = ik;
+        b_prev[id] = prev;
+        b_curr[id] = curr;
+        b_swap[id] = swap;
+    }
+    lwpf_stop(l_forward_batch);
+
+    mem->n = 0;
+    lwpf_start(l_backward_batch);
+    for(int id = 0; id < bs; id++) {
+    //for(int id = bs - 1; id >= 0; id--) {
+        int this_mem_n = 0;
+        bwtintv_v *prev = b_prev[id];
+        bwtintv_v *curr = b_curr[id];
+        bwtintv_v *swap = b_swap[id];
+        bwtintv_t ik = b_ik[id];
+        bwtintv_t ok[4];
+        int c, i, j;
+        int x = b_x[id];
+        int min_intv = b_min_intv[id];
+        for (i = x - 1; i >= -1; --i) { // backward search for MEMs
+            c = i < 0? -1 : q[i] < 4? q[i] : -1; // c==-1 if i<0 or q[i] is an ambiguous base
+            for (j = 0, curr->n = 0; j < prev->n; ++j) {
+                bwtintv_t *p = &prev->a[j];
+                if (c >= 0 && ik.x[2] >= max_intv) bwt_extend_forward_base(bwt, p, ok, c);
+                //if (c >= 0 && ik.x[2] >= max_intv) bwt_extend(bwt, p, ok, 1);
+                if (c < 0 || ik.x[2] < max_intv || ok[c].x[2] < min_intv) { // keep the hit if reaching the beginning or an ambiguous base or the intv is small enough
+                    if (curr->n == 0) { // test curr->n>0 to make sure there are no longer matches
+                        if (this_mem_n == 0 || i + 1 < mem->a[mem->n-1].info>>32) { // skip contained matches
+                            ik = *p; ik.info |= (uint64_t)(i + 1)<<32;
+                            kv_push(bwtintv_t, *mem, ik);
+                            this_mem_n++;
+                        }
+                    } // otherwise the match is contained in another longer match
+                } else if (curr->n == 0 || ok[c].x[2] != curr->a[curr->n-1].x[2]) {
+                    ok[c].info = p->info;
+                    kv_push(bwtintv_t, *curr, ok[c]);
+#ifdef use_my_prefetch
+                    bwtint_t k1 = ok[c].x[0] - 1;
+                    if(k1 != -1) __builtin_prefetch(bwt_occ_intv(bwt, k1 - (k1 >= bwt->primary)), 0, 3);
+                    bwtint_t l1 = ok[c].x[0] - 1 + ok[c].x[2];
+                    if(l1 != -1) __builtin_prefetch(bwt_occ_intv(bwt, l1 - (l1 >= bwt->primary)), 0, 3);
+#endif
+                }
+            }
+            if (curr->n == 0) break;
+            swap = curr; curr = prev; prev = swap;
+        }
+    }
+    bwt_reverse_intvs(mem); // s.t. sorted by the start coordinate
+
+    lwpf_stop(l_backward_batch);
+}
+#endif
+
+
 // NOTE: $max_intv is not currently used in BWA-MEM
 int bwt_smem1a(const bwt_t *bwt, int len, const uint8_t *q, int x, int min_intv, uint64_t max_intv, bwtintv_v *mem, bwtintv_v *tmpvec[2])
 {
@@ -355,7 +528,7 @@ int bwt_smem1a(const bwt_t *bwt, int len, const uint8_t *q, int x, int min_intv,
 	if (q[x] > 3) return x + 1;
 
 
-    lwpf_start(l_smem1a_forward);
+    lwpf_start(l_smem1a_for);
 
 	if (min_intv < 1) min_intv = 1; // the interval size should be at least 1
 	kv_init(a[0]); kv_init(a[1]);
@@ -364,7 +537,6 @@ int bwt_smem1a(const bwt_t *bwt, int len, const uint8_t *q, int x, int min_intv,
 	bwt_set_intv(bwt, q[x], ik); // the initial interval of a single base
 	ik.info = x + 1;
     
-    double t0;
 
 	for (i = x + 1, curr->n = 0; i < len; ++i) { // forward search
 		if (ik.x[2] < max_intv) { // an interval small enough
@@ -396,14 +568,14 @@ int bwt_smem1a(const bwt_t *bwt, int len, const uint8_t *q, int x, int min_intv,
 			break; // always terminate extension at an ambiguous base; in this case, i<len always stands
 		}
 	}
-    lwpf_stop(l_smem1a_forward);
+    lwpf_stop(l_smem1a_for);
 
 	if (i == len) kv_push(bwtintv_t, *curr, ik); // push the last interval if we reach the end
 	bwt_reverse_intvs(curr); // s.t. smaller intervals (i.e. longer matches) visited first
 	ret = curr->a[0].info; // this will be the returned value
 	swap = curr; curr = prev; prev = swap;
 
-    lwpf_start(l_smem1a_backward);
+    lwpf_start(l_smem1a_back);
 	for (i = x - 1; i >= -1; --i) { // backward search for MEMs
 		c = i < 0? -1 : q[i] < 4? q[i] : -1; // c==-1 if i<0 or q[i] is an ambiguous base
 		for (j = 0, curr->n = 0; j < prev->n; ++j) {
@@ -440,13 +612,20 @@ int bwt_smem1a(const bwt_t *bwt, int len, const uint8_t *q, int x, int min_intv,
 		if (curr->n == 0) break;
 		swap = curr; curr = prev; prev = swap;
 	}
-    lwpf_stop(l_smem1a_backward);
+    lwpf_stop(l_smem1a_back);
 	bwt_reverse_intvs(mem); // s.t. sorted by the start coordinate
 
 	if (tmpvec == 0 || tmpvec[0] == 0) free(a[0].a);
 	if (tmpvec == 0 || tmpvec[1] == 0) free(a[1].a);
 	return ret;
 }
+
+#ifdef use_2_pass_batch
+void bwt_smem1_batch(int bs, const bwt_t *bwt, int len, const uint8_t *q, int *x, int *min_intv, bwtintv_v *mem)
+{
+	bwt_smem1a_batch(bs, bwt, len, q, x, min_intv, 0, mem);
+}
+#endif
 
 int bwt_smem1(const bwt_t *bwt, int len, const uint8_t *q, int x, int min_intv, bwtintv_v *mem, bwtintv_v *tmpvec[2])
 {

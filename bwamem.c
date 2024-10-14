@@ -98,6 +98,10 @@ extern long long s_px2;
 #define bwt_sa_slave
 
 #define bwt_sa_slave2
+
+
+extern void SLAVE_FUN(get_occ_bench());
+
 extern void SLAVE_FUN(worker1_s_init());
 extern void SLAVE_FUN(worker1_s_fast());
 extern void SLAVE_FUN(worker1_s());
@@ -1301,6 +1305,9 @@ static void worker2(void *data, int i, int tid)
     }
 }
 
+
+//#define use_cgs_mode
+
 void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bns, const uint8_t *pac, int64_t n_processed, int n, bseq1_t *seqs, const mem_pestat_t *pes0)
 {
 	//extern void kt_for(int n_threads, void (*func)(void*,int,int), void *data, int n);
@@ -1314,11 +1321,36 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
     w.opt = opt; w.bwt = bwt; w.bns = bns; w.pac = pac;
 	w.seqs = seqs; w.n_processed = n_processed;
 	w.pes = &pes[0];
-	w.aux = malloc(64 * sizeof(smem_aux_t));
-	for (int i = 0; i < 64; ++i) {
+#ifdef use_cgs_mode
+    const int cpe_num = 384;
+#else
+    const int cpe_num = 64;
+#endif
+
+	w.aux = malloc(cpe_num * sizeof(smem_aux_t));
+	for (int i = 0; i < cpe_num; ++i) {
 		//w.aux[i] = smem_aux_init();
 		w.aux[i] = 0;
     }
+
+//#define get_occ_benchmark
+
+#ifdef get_occ_benchmark
+    Para_worker1_s para0;
+    para0.data = (void*)&w;
+
+    double t_start = GetTime();
+# ifdef use_cgs_mode
+    __real_athread_spawn_cgs((void*)slave_get_occ_bench, &para0, 1);
+    athread_join_cgs();
+# else
+    __real_athread_spawn((void*)slave_get_occ_bench, &para0, 1);
+    athread_join();
+# endif
+    fprintf(stderr, "benchmark cost %lf\n", GetTime() - t_start);
+    exit(0);
+     
+#endif
 
 
     long nn = (opt->flag&MEM_F_PE)? n>>1 : n;
@@ -1337,8 +1369,13 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 
 
     tt0 = GetTime();
+# ifdef use_cgs_mode
+    __real_athread_spawn_cgs((void*)slave_worker1_s_pre_fast, &para, 1);
+    athread_join_cgs();
+# else
     __real_athread_spawn((void*)slave_worker1_s_pre_fast, &para, 1);
     athread_join();
+# endif
     fprintf(stderr, "slave pre done\n");
     t_work1_2 += GetTime() - tt0;
       
@@ -1347,7 +1384,7 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
         w.regs[i].m = para.cpe_regs[i].n;
         w.regs[i].a = malloc(sizeof(mem_alnreg_t) * w.regs[i].m);
         if(w.regs[i].a == NULL) {
-            fprintf(stderr, "GG malloc %d null\n", para.cpe_regs[i].n);
+            fprintf(stderr, "GG malloc %d %d null\n", i, para.cpe_regs[i].n);
             exit(0);
         }
         w.regs[i].n = 0;
@@ -1355,8 +1392,13 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
     t_work1_3 += GetTime() - tt0;
 
     tt0 = GetTime();
+# ifdef use_cgs_mode
+    __real_athread_spawn_cgs((void*)slave_worker1_s_fast, &para, 1);
+    athread_join_cgs();
+# else
     __real_athread_spawn((void*)slave_worker1_s_fast, &para, 1);
     athread_join();
+# endif
     fprintf(stderr, "slave round done\n");
     t_work1_4 += GetTime() - tt0;
 
@@ -1367,12 +1409,12 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 
 #else
     for(int i = 0; i < nn; i++) {
-        worker1(&w, i, i % 64);
+        worker1(&w, i, i % cpe_num);
     }
 #endif
 
 
-	//for (int i = 0; i < 64; ++i)
+	//for (int i = 0; i < cpe_num; ++i)
 	//	smem_aux_destroy(w.aux[i]);
 
     tt0 = GetTime();
@@ -1414,8 +1456,13 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
     t_work2_1 += GetTime() - tt1;
 
     tt1 = GetTime();
+# ifdef use_cgs_mode
+    __real_athread_spawn_cgs((void*)slave_worker2_s, &para, 1);
+    athread_join_cgs();
+# else
     __real_athread_spawn((void*)slave_worker2_s, &para2, 1);
     athread_join();
+# endif
     //athread_halt();
     t_work2_2 += GetTime() - tt1;
 
@@ -1426,7 +1473,7 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
     t_work2_3 += GetTime() - tt1;
 #else
     for(int i = 0; i < nn; i++) {
-        worker2(&w, i, i % 64);
+        worker2(&w, i, i % cpe_num);
     }
 //	kt_for_single(opt->n_threads, worker2, &w, (opt->flag&MEM_F_PE)? n>>1 : n); // generate alignment
 #endif

@@ -135,6 +135,7 @@ typedef struct { // This struct is only used for the convenience of API.
 extern "C" {
 #endif
 
+    void occ_bench(void *data);
     void worker1_init(void *data, int i, int tid);
     void worker1_pre(void *data, int i, int tid, int* real_size);
     void worker1_pre_fast(void *data, int i, int tid, mem_alnreg_v* cpe_regs);

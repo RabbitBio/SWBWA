@@ -89,6 +89,7 @@ extern long long c_px2;
 extern long long s_px2;
 
 
+static int bwa_verbose = 1;
 
 void slave_bwt_sa_s();
 
@@ -1265,14 +1266,12 @@ mem_alnreg_v mem_align1_core(int id, const mem_opt_t *opt, const bwt_t *init_bwt
 {
 
 
+    //bwt_t *bwt = init_bwt;
     bwt_t *bwt = ldm_malloc(sizeof(bwt_t));
     *bwt = *init_bwt;
     memcpy(bwt->L2, init_bwt->L2, sizeof(bwtint_t) * 5);
     memcpy(bwt->cnt_table, init_bwt->cnt_table, sizeof(uint32_t) * 256);
 
-    //static int cntt = 0;
-    //cntt++;
-    //if(cntt < 10 && _PEN == 0) fprintf(stderr, "slave %d, L2 addr %p\n", _PEN, bwt->L2);
 	int i;
 	mem_chain_v chn;
 	mem_alnreg_v regs;
@@ -1516,6 +1515,53 @@ void worker1(void *data, int i, int tid)
         }
         free(reg.a);
 	}
+}
+
+
+#define bench_addr_mod 2147483648ll
+
+int get_value_from_file(const char *filename) {
+    FILE *file = fopen(filename, "r");
+    if (file == NULL) {
+        perror("Error opening file");
+        return -1; 
+    }
+
+    int value;
+    if (fscanf(file, "%d", &value) != 1) {
+        perror("Error reading from file");
+        fclose(file);
+        return -1;
+    }
+
+    fclose(file);
+    return value;
+}
+
+
+__uncached long lock_s;
+void occ_bench(void *data) {
+    int file_value = get_value_from_file("ccc_log");
+    if(_PEN >= file_value) return;
+    worker_t *w = (worker_t*)data;
+    uint64_t l_p = w->bns->l_pac;
+
+	uint64_t N = 1ll << 22;
+	uint64_t pre_cnt = _PEN * rand() + rand();
+    int cnt = 0;
+    uint64_t cntt[4];
+    for(uint64_t i = 0; i < N; i++) {
+        uint64_t k = (pre_cnt + pre_cnt / 991) % bench_addr_mod;
+        //bench_bwt_occ4(w->bwt, k, &cnt);
+        //pre_cnt += cnt;
+        //if(i % 100000 == 0) fprintf(stderr, "k : %llu, cnt : %llu, pre_cnt %llu\n", k, cnt, pre_cnt);
+        bwt_occ4(w->bwt, k, cntt);
+        pre_cnt += cntt[0] + cntt[1] + cntt[2] + cntt[3];
+    }
+    athread_lock(&lock_s);
+    fprintf(stderr, "slave%d pre_cnt is %llu\n", _PEN, pre_cnt);
+    athread_unlock(&lock_s);
+
 }
 
 void worker1_init(void *data, int i, int tid)

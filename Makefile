@@ -15,7 +15,7 @@ AOBJS=		bwashm.o bwase.o bwaseqio.o bwtgap.o bwtaln.o bamlite.o \
 			bwtsw2_chain.o fastmap.o bwtsw2_pair.o
 PROG=		bwa
 INCLUDES=	
-LIBS= -lm -lz -lpthread -lm_slave 
+LIBS= -lm -lz -lpthread -lm_slave
 #-lswperf
 SUBDIRS=	.
 

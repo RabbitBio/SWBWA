@@ -18,15 +18,30 @@ typedef struct{
     void* data;
 } Para_worker2_s;
 
+void get_occ_bench(Para_worker1_s *para) {
+    occ_bench(para->data);
+}
+
+//#define use_cgs_mode
+
+#ifdef use_cgs_mode
+#define cpe_num_slave 384
+#define global_pen (_CGN * 64 + _PEN)
+#else
+#define cpe_num_slave 64
+#define global_pen (_PEN)
+#endif
+
+
 void worker1_s_init(Para_worker1_s *para) {
-    for(long i = _PEN; i < para->nn; i += 64) {
-        worker1_init(para->data, i, _PEN);
+    for(long i = global_pen; i < para->nn; i += cpe_num_slave) {
+        worker1_init(para->data, i, global_pen);
     }
 }
 
 void worker1_s(Para_worker1_s *para) {
-    for(long i = _PEN; i < para->nn; i += 64) {
-        worker1(para->data, i, _PEN);
+    for(long i = global_pen; i < para->nn; i += cpe_num_slave) {
+        worker1(para->data, i, global_pen);
     }
 }
 
@@ -35,8 +50,8 @@ void worker1_s_fast(Para_worker1_s *para) {
     lwpf_enter(TEST);
     lwpf_start(l_worker1_2);
 #endif
-    for(long i = _PEN; i < para->nn; i += 64) {
-        worker1_fast(para->data, i, _PEN, para->cpe_regs);
+    for(long i = global_pen; i < para->nn; i += cpe_num_slave) {
+        worker1_fast(para->data, i, global_pen, para->cpe_regs);
     }
 #ifdef use_lwpf3
     lwpf_stop(l_worker1_2);
@@ -46,8 +61,8 @@ void worker1_s_fast(Para_worker1_s *para) {
 
 
 void worker1_s_pre(Para_worker1_s *para) {
-    for(long i = _PEN; i < para->nn; i += 64) {
-        worker1_pre(para->data, i, _PEN, para->real_sizes);
+    for(long i = global_pen; i < para->nn; i += cpe_num_slave) {
+        worker1_pre(para->data, i, global_pen, para->real_sizes);
     }
 }
 
@@ -58,8 +73,8 @@ void worker1_s_pre_fast(Para_worker1_s *para) {
     lwpf_start(l_worker1_1);
 #endif
  
-    for(long i = _PEN; i < para->nn; i += 64) {
-        worker1_pre_fast(para->data, i, _PEN, para->cpe_regs);
+    for(long i = global_pen; i < para->nn; i += cpe_num_slave) {
+        worker1_pre_fast(para->data, i, global_pen, para->cpe_regs);
     }
 #ifdef use_lwpf3
     lwpf_stop(l_worker1_1);
@@ -74,10 +89,8 @@ void worker2_s(Para_worker2_s *para) {
     lwpf_enter(TEST);
     lwpf_start(l_worker2);
 #endif
-    //if(_PEN) return;
-    for(long i = _PEN; i < para->nn; i += 64) {
-    //for(long i = _PEN; i < para->nn; i++) {
-        worker2(para->data, i, _PEN);
+    for(long i = global_pen; i < para->nn; i += cpe_num_slave) {
+        worker2(para->data, i, global_pen);
     }
 #ifdef use_lwpf3
     lwpf_stop(l_worker2);

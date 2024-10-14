@@ -38,12 +38,13 @@
 #include "utils.h"
 #include "bntseq.h"
 #include "kseq.h"
+#include <athread.h>
 KSEQ_DECLARE(gzFile)
 
 extern unsigned char nst_nt4_table[256];
 
 
-#define use_lwpf3
+//#define use_lwpf3
 
 #ifdef use_lwpf3
 #define LWPF_UNITS U(TEST)
@@ -450,6 +451,8 @@ int main_mem(int argc, char *argv[])
 
 
     athread_init();
+    //athread_init_cgs();
+
 
 #ifdef use_swlu
     swlu_debug_init();

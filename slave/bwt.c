@@ -118,8 +118,8 @@ static inline int __occ_aux(uint64_t y, int c)
 }
 
 
-volatile __thread_local int reply;
-__thread_local_fix uint32_t p_tmp[16];
+//volatile __thread_local int reply;
+//__thread_local_fix uint32_t p_tmp[16];
 bwtint_t bwt_occ(const bwt_t *bwt, bwtint_t k, ubyte_t c)
 {
 	bwtint_t n1, n2 = 0;
@@ -221,6 +221,11 @@ void bwt_2occ(const bwt_t *bwt, bwtint_t k, bwtint_t l, ubyte_t c, bwtint_t *ok,
 #define __occ_aux4(bwt, b)											\
 	((bwt)->cnt_table[(b)&0xff] + (bwt)->cnt_table[(b)>>8&0xff]		\
 	 + (bwt)->cnt_table[(b)>>16&0xff] + (bwt)->cnt_table[(b)>>24])
+
+void bench_bwt_occ4(const bwt_t *bwt, bwtint_t k, int *cnt)
+{
+	*cnt = *(bwt_occ_intv(bwt, k));
+}
 
 
 void bwt_occ4(const bwt_t *bwt, bwtint_t k, bwtint_t cnt[4])

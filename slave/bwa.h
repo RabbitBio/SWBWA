@@ -60,7 +60,8 @@ typedef struct {
 	char *name, *comment, *seq, *qual, *sam;
 } bseq1_t;
 
-extern int bwa_verbose, bwa_dbg;
+//extern int bwa_verbose, bwa_dbg;
+extern int bwa_dbg;
 extern char bwa_rg_id[256];
 
 #ifdef __cplusplus

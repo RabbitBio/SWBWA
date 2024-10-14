@@ -45,6 +45,7 @@
 #  include "malloc_wrap.h"
 #endif
 
+static int bwa_verbose = 1;
 
 int is_bwt(ubyte_t *T, int n);
 

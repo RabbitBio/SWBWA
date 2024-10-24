@@ -10,9 +10,255 @@ typedef union m128i {
     intv16 val;
 } __m128i;
 
+//#define use_2_int8
+
 uintv16 v_min = 0;
 uintv16 v_max = 0xFFFFFFFF;
 
+intv16 v_low8 = 255;
+intv16 v_mid8 = 255 << 16;
+
+#define my_int int16_t
+
+#ifdef use_2_int8
+static inline __m128i _mm_set1_epi32(int32_t n) {
+	assert(n >= 0 && n <= 255);
+	__m128i r;
+    r.val = (n << 16) | n;
+    return r;
+}
+
+static inline __m128i _mm_load_si128(const __m128i *ptr) {
+    __m128i r;
+    simd_load(r.val, (int*)ptr); 
+    return r; 
+}
+static inline void _mm_store_si128(__m128i *ptr, __m128i a) { 
+    simd_store(a.val, ptr);
+}
+
+static inline int m128i_allzero(__m128i a) {
+
+    //int val[16];
+    //simd_store(a.val, &(val[0]));
+    //for(int i = 0; i < 16; i++) 
+    //    if(val[i]) return 0;
+    //return 1;
+
+    intv16 xx = a.val;
+    xx = simd_vbisw(xx, simd_sllx(xx, 8 * 32));
+    xx = simd_vbisw(xx, simd_sllx(xx, 4 * 32));
+    xx = simd_vbisw(xx, simd_sllx(xx, 2 * 32));
+    xx = simd_vbisw(xx, simd_sllx(xx, 1 * 32));
+    return simd_vextw15(xx) == 0;
+}
+
+static inline __m128i _mm_slli_si128(__m128i a, int n) {
+    __m128i r;
+    r.val = simd_sllx(a.val, n * 16);
+	return r;
+}
+
+
+static inline __m128i _mm_max_epu8(__m128i a, __m128i b) {
+    intv16 mask = simd_vcmpltw(a.val, b.val);
+    uintv16 extended_mask = simd_vsubw(v_min, mask);
+    intv16 b_selected2 = simd_vandw(extended_mask2, b.val);
+    extended_mask2 = simd_vxorw(extended_mask2, v_max);
+    intv16 a_selected2 = simd_vandw(extended_mask2, a.val);
+
+
+    intv16 a1 = simd_vandw(v_low8, a.val);
+    intv16 b1 = simd_vandw(v_low8, b.val);
+ 
+    intv16 mask1 = simd_vcmpltw(a1, b1);
+    uintv16 extended_mask1 = simd_vsubw(v_min, mask1);
+    intv16 b_selected1 = simd_vandw(extended_mask1, b1);
+    extended_mask1 = simd_vxorw(extended_mask1, v_max);
+    intv16 a_selected1 = simd_vandw(extended_mask1, a1);
+ 
+    intv16 mask2 = simd_vcmpltw(a.val, b.val);
+    uintv16 extended_mask2 = simd_vsubw(v_min, mask2);
+    intv16 b_selected2 = simd_vandw(extended_mask2, b.val);
+    extended_mask2 = simd_vxorw(extended_mask2, v_max);
+    intv16 a_selected2 = simd_vandw(extended_mask2, a.val);
+
+    a.val = simd_vaddw(simd_vaddw(a_selected1, b_selected1), simd_vandw(v_mid8, simd_vaddw(a_selected2, b_selected2)));
+
+    return a;
+
+    
+ 
+    //int val1[16];
+    //simd_store(a.val, &(val1[0]));
+    //int val2[16];
+    //simd_store(b.val, &(val2[0]));
+    //for(int i = 0; i < 16; i++) {
+    //    my_int v1 = val1[i] & 0xFF;
+    //    my_int v2 = (val1[i] >> 16) & 0xFF;
+    //    my_int v3 = val2[i] & 0xFF;
+    //    my_int v4 = (val2[i] >> 16) & 0xFF;
+    //    val1[i] = (v1 > v3 ? v1 : v3) + ((v2 > v4 ? v2 : v4) << 16);
+    //}
+    //__m128i r;
+    //simd_load(r.val, &(val1[0])); 
+	//return r;
+}
+
+static inline __m128i _mm_min_epu8(__m128i a, __m128i b) {
+    intv16 a1 = simd_vandw(v_low8, a.val);
+    intv16 b1 = simd_vandw(v_low8, b.val);
+    intv16 a2 = simd_vandw(v_mid8, a.val);
+    intv16 b2 = simd_vandw(v_mid8, b.val);
+
+    intv16 mask1 = simd_vcmpltw(a1, b1);
+    uintv16 extended_mask1 = simd_vsubw(v_min, mask1);
+    intv16 a_selected1 = simd_vandw(extended_mask1, a1);
+    extended_mask1 = simd_vxorw(extended_mask1, v_max);
+    intv16 b_selected1 = simd_vandw(extended_mask1, b1);
+    a1 = simd_vaddw(a_selected1, b_selected1);
+ 
+    intv16 mask2 = simd_vcmpltw(a2, b2);
+    uintv16 extended_mask2 = simd_vsubw(v_min, mask2);
+    intv16 a_selected2 = simd_vandw(extended_mask2, a2);
+    extended_mask2 = simd_vxorw(extended_mask2, v_max);
+    intv16 b_selected2 = simd_vandw(extended_mask2, b2);
+    a2 = simd_vaddw(a_selected2, b_selected2);
+
+    a.val = simd_vaddw(a1, a2);
+
+    return a;
+    
+
+    //int val1[16];
+    //simd_store(a.val, &(val1[0]));
+    //int val2[16];
+    //simd_store(b.val, &(val2[0]));
+    //for(int i = 0; i < 16; i++) {
+    //    my_int v1 = val1[i] & 0xFF;
+    //    my_int v2 = (val1[i] >> 16) & 0xFF;
+    //    my_int v3 = val2[i] & 0xFF;
+    //    my_int v4 = (val2[i] >> 16) & 0xFF;
+    //    val1[i] = (v1 < v3 ? v1 : v3) + ((v2 < v4 ? v2 : v4) << 16);
+    //}
+    //__m128i r;
+    //simd_load(r.val, &(val1[0])); 
+	//return r;
+}
+
+
+static inline uint8_t m128i_max_u8(__m128i a) {
+    int val[16];
+    simd_store(a.val, &(val[0]));
+	int max = 0;
+	for (int i = 0; i < 16; i++) {
+        my_int v1 = val[i] & 0xFF;
+        my_int v2 = (val[i] >> 16) & 0xFF;
+        if(v1 > max) max = v1;
+        if(v2 > max) max = v2;
+    }
+	return max;
+}
+
+static inline __m128i _mm_set1_epi8(int8_t n) {
+	__m128i r;
+    r.val = (n << 16) | n; 
+    return r;
+}
+
+static inline __m128i _mm_adds_epu8(__m128i a, __m128i b) {
+    intv16 a1 = simd_vandw(v_low8, a.val);
+    intv16 b1 = simd_vandw(v_low8, b.val);
+    intv16 a2 = simd_vandw(v_mid8, a.val);
+    intv16 b2 = simd_vandw(v_mid8, b.val);
+
+    a1= simd_vaddw(a1, b1);
+    intv16 mask1 = simd_vcmpltw(a1, v_low8);
+    uintv16 extended_mask1 = simd_vsubw(v_min, mask1);
+    intv16 a_selected1 = simd_vandw(extended_mask1, a1);
+    extended_mask1 = simd_vxorw(extended_mask1, v_max);
+    intv16 b_selected1 = simd_vandw(extended_mask1, v_low8);
+    a1= simd_vaddw(a_selected1, b_selected1);
+
+    a2= simd_vaddw(a2, b2);
+    intv16 mask2 = simd_vcmpltw(a2, v_mid8);
+    uintv16 extended_mask2 = simd_vsubw(v_min, mask2);
+    intv16 a_selected2 = simd_vandw(extended_mask2, a2);
+    extended_mask2 = simd_vxorw(extended_mask2, v_max);
+    intv16 b_selected2 = simd_vandw(extended_mask2, v_mid8);
+    a2= simd_vaddw(a_selected2, b_selected2);
+
+    a.val = simd_vaddw(a1, a2);
+    return a;
+
+
+
+    //int val1[16];
+    //simd_store(a.val, &(val1[0]));
+    //int val2[16];
+    //simd_store(b.val, &(val2[0]));
+    //for(int i = 0; i < 16; i++) {
+    //    my_int v1 = val1[i] & 0xFF;
+    //    my_int v2 = (val1[i] >> 16) & 0xFF;
+    //    my_int v3 = val2[i] & 0xFF;
+    //    my_int v4 = (val2[i] >> 16) & 0xFF;
+    //    v1 += v3;
+    //    if(v1 > 255) v1 = 255;
+    //    v2 += v4;
+    //    if(v2 > 255) v2 = 255;
+    //    val1[i] = v1 + (v2 << 16);
+    //}
+    //__m128i r;
+    //simd_load(r.val, &(val1[0])); 
+	//return r;
+}
+
+static inline __m128i _mm_subs_epu8(__m128i a, __m128i b) {
+    intv16 a1 = simd_vandw(v_low8, a.val);
+    intv16 b1 = simd_vandw(v_low8, b.val);
+    intv16 a2 = simd_vandw(v_mid8, a.val);
+    intv16 b2 = simd_vandw(v_mid8, b.val);
+
+    a1= simd_vsubw(a1, b1);
+    intv16 mask1 = simd_vcmpltw(a1, v_min);
+    uintv16 extended_mask1 = simd_vsubw(v_min, mask1);
+    intv16 b_selected1 = simd_vandw(extended_mask1, v_min);
+    extended_mask1 = simd_vxorw(extended_mask1, v_max);
+    intv16 a_selected1 = simd_vandw(extended_mask1, a1);
+    a1= simd_vaddw(a_selected1, b_selected1);
+
+    a2= simd_vsubw(a2, b2);
+    intv16 mask2 = simd_vcmpltw(a2, v_min);
+    uintv16 extended_mask2 = simd_vsubw(v_min, mask2);
+    intv16 b_selected2 = simd_vandw(extended_mask2, v_min);
+    extended_mask2 = simd_vxorw(extended_mask2, v_max);
+    intv16 a_selected2 = simd_vandw(extended_mask2, a2);
+    a2= simd_vaddw(a_selected2, b_selected2);
+
+    a.val = simd_vaddw(a1, a2);
+    return a;
+
+
+    //int val1[16];
+    //simd_store(a.val, &(val1[0]));
+    //int val2[16];
+    //simd_store(b.val, &(val2[0]));
+    //for(int i = 0; i < 16; i++) {
+    //    int v1 = val1[i] & 0xFF;
+    //    int v2 = (val1[i] >> 16) & 0xFF;
+    //    int v3 = val2[i] & 0xFF;
+    //    int v4 = (val2[i] >> 16) & 0xFF;
+    //    v1 -= v3;
+    //    if(v1 < 0) v1 = 0;
+    //    v2 -= v4;
+    //    if(v2 < 0) v2 = 0;
+    //    val1[i] = v1 + (v2 << 16);
+    //}
+    //__m128i r;
+    //simd_load(r.val, &(val1[0])); 
+	//return r;
+}
+#else
 static inline __m128i _mm_set1_epi32(int32_t n) {
 	assert(n >= 0 && n <= 255);
 	__m128i r;
@@ -176,6 +422,7 @@ static inline __m128i _mm_subs_epu8(__m128i a, __m128i b) {
     //simd_load(a.val, &(val[0])); 
 	return a;
 }
+#endif
 
 static inline __m128i _mm_adds_epi16(__m128i a, __m128i b) {
     fprintf(stderr, "TODO\n");

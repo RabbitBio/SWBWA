@@ -72,7 +72,7 @@ void worker1_s_pre_fast(Para_worker1_s *para) {
     lwpf_enter(TEST);
     lwpf_start(l_worker1_1);
 #endif
- 
+
     for(long i = global_pen; i < para->nn; i += cpe_num_slave) {
         worker1_pre_fast(para->data, i, global_pen, para->cpe_regs);
     }

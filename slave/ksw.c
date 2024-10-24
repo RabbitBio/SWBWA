@@ -68,6 +68,11 @@ struct _kswq_t {
  *
  * @return       Query data structure
  */
+
+
+//__thread_local_fix char kswq_fix[32 << 10];
+
+
 kswq_t *ksw_qinit(int size, int qlen, const uint8_t *query, int m, const int8_t *mat)
 {
 	kswq_t *q;
@@ -75,8 +80,14 @@ kswq_t *ksw_qinit(int size, int qlen, const uint8_t *query, int m, const int8_t 
 
 	size = size > 1? 2 : 1;
 	p = 8 * (3 - size); // # values per __m128i
+#ifdef use_2_int8
+    // TODO p << 2 ?
+    p <<= 1;
+#endif
 	slen = (qlen + p - 1) / p; // segmented length
 	q = (kswq_t*)malloc(sizeof(kswq_t) + 256 + 64 * 4 * slen * (m + 4)); // a single block of memory
+	//q = (kswq_t*)ldm_malloc(32 << 10); // a single block of memory
+    //q = (kswq_t*)kswq_fix;
 	q->qp = (__m128i*)(((size_t)q + sizeof(kswq_t) + 63) >> 6 << 6); // align memory
 	q->H0 = q->qp + slen * m;
 	q->H1 = q->H0 + slen;
@@ -96,7 +107,11 @@ kswq_t *ksw_qinit(int size, int qlen, const uint8_t *query, int m, const int8_t 
 	//  {{0,3,6,9,12,15,18,-1},{1,4,7,10,13,16,-1,-1},{2,5,8,11,14,17,-1,-1}}
 	if (size == 1) {
 		//int8_t *t = (int8_t*)q->qp;
+#ifdef use_2_int8
+		int16_t *t = (int16_t*)q->qp;
+#else
 		int *t = (int*)q->qp;
+#endif
 		for (a = 0; a < m; ++a) {
 			int i, k, nlen = slen * p;
 			const int8_t *ma = mat + a * m;
@@ -150,6 +165,12 @@ kswr_t ksw_u8(kswq_t *q, int tlen, const uint8_t *target, int _o_del, int _e_del
 #define allzero_16(xx) (m128i_allzero((xx)))
 #endif
 
+#ifdef use_2_int8
+    const int p_new = 32;
+#else
+    const int p_new = 16;
+#endif
+
 	// initialization
 	r = g_defr;
 	minsc = (xtra&KSW_XSUBO)? xtra&0xffff : 0x10000;
@@ -201,7 +222,7 @@ kswr_t ksw_u8(kswq_t *q, int tlen, const uint8_t *target, int _o_del, int _e_del
 			h = _mm_load_si128(H0 + j); // h=H'(i-1,j)
 		}
 		// NB: we do not need to set E(i,j) as we disallow adjecent insertion and then deletion
-		for (k = 0; LIKELY(k < 16); ++k) { // this block mimics SWPS3; NB: H(i,j) updated in the lazy-F loop cannot exceed max
+		for (k = 0; LIKELY(k < p_new); ++k) { // this block mimics SWPS3; NB: H(i,j) updated in the lazy-F loop cannot exceed max
 			f = _mm_slli_si128(f, 1);
 			for (j = 0; LIKELY(j < slen); ++j) {
 				h = _mm_load_si128(H1 + j);
@@ -235,12 +256,16 @@ end_loop16:
 	r.score = gmax + q->shift < 255? gmax : 255;
 	r.te = te;
 	if (r.score != 255) { // get a->qe, the end of query match; find the 2nd best score
-		int max = -1, tmp, low, high, qlen = slen * 16;
+		int max = -1, tmp, low, high, qlen = slen * p_new;
 		//uint8_t *t = (uint8_t*)Hmax;
+#ifdef use_2_int8
+		uint16_t *t = (uint16_t*)Hmax;
+#else
 		int *t = (int*)Hmax;
+#endif
 		for (i = 0; i < qlen; ++i, ++t)
-			if ((int)*t > max) max = *t, r.qe = i / 16 + i % 16 * slen;
-			else if ((int)*t == max && (tmp = i / 16 + i % 16 * slen) < r.qe) r.qe = tmp; 
+			if ((int)*t > max) max = *t, r.qe = i / p_new + i % p_new * slen;
+			else if ((int)*t == max && (tmp = i / p_new + i % p_new * slen) < r.qe) r.qe = tmp; 
 		//printf("%d,%d\n", max, gmax);
 		if (b) {
 			i = (r.score + q->max - 1) / q->max;
@@ -402,6 +427,7 @@ kswr_t ksw_align2(int qlen, uint8_t *query, int tlen, uint8_t *target, int m, co
 	size = q->size;
 	r = func(q, tlen, target, o_del, e_del, o_ins, e_ins, xtra);
 	if (qry == 0) free(q);
+	//if (qry == 0) ldm_free(q, 32 << 10);
 #ifdef use_lwpf3
     lwpf_stop(l_ksw_2);
 #endif
@@ -423,6 +449,7 @@ kswr_t ksw_align2(int qlen, uint8_t *query, int tlen, uint8_t *target, int m, co
 	rr = func(q, tlen, target, o_del, e_del, o_ins, e_ins, KSW_XSTOP | r.score);
 	revseq(r.qe + 1, query); revseq(r.te + 1, target);
 	free(q);
+	//ldm_free(q, 32 << 10);
 	if (r.score == rr.score)
 		r.tb = r.te - rr.te, r.qb = r.qe - rr.qe;
 #ifdef use_lwpf3

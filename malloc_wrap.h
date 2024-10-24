@@ -8,14 +8,17 @@
 extern "C" {
 #endif
 
-	void *wrap_calloc(size_t nmemb, size_t size,
-					  const char *file, unsigned int line, const char *func);
-	void *wrap_malloc(size_t size,
-					  const char *file, unsigned int line, const char *func);
-	void *wrap_realloc(void *ptr, size_t size,
-					   const char *file, unsigned int line, const char *func);
-	char *wrap_strdup(const char *s,
-					  const char *file, unsigned int line, const char *func);
+        void *wrap_calloc(size_t nmemb, size_t size,
+                                          const char *file, unsigned int line, const char *func);
+        void *wrap_malloc(size_t size,
+                                          const char *file, unsigned int line, const char *func);
+        void *wrap_realloc(void *ptr, size_t size,
+                                           const char *file, unsigned int line, const char *func);
+        char *wrap_strdup(const char *s,
+                                          const char *file, unsigned int line, const char *func);
+    void wrap_free(void *ptr,
+            const char *file, unsigned int line, const char *func);
+
 
 #ifdef __cplusplus
 }
@@ -41,6 +44,12 @@ extern "C" {
 #    undef strdup
 #  endif
 #  define strdup(s)     wrap_strdup( (s),      __FILE__, __LINE__, __func__)
+
+#  ifdef free
+#    undef free
+#  endif
+#  define free(p)       wrap_free((p), __FILE__, __LINE__, __func__)
+
 
 #endif /* USE_MALLOC_WRAPPERS */
 

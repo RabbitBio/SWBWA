@@ -188,11 +188,11 @@ int mem_matesw(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, co
 		if (rb < 0) rb = 0;
 		if (re > l_pac<<1) re = l_pac<<1;
 #ifdef use_lwpf3
-    lwpf_start(l_bns_fetch_seq);
+        lwpf_start(l_bns_fetch_seq);
 #endif
 		if (rb < re) ref = bns_fetch_seq(bns, pac, &rb, (rb+re)>>1, &re, &rid);
 #ifdef use_lwpf3
-    lwpf_stop(l_bns_fetch_seq);
+        lwpf_stop(l_bns_fetch_seq);
 #endif
 		if (a->rid == rid && re - rb >= opt->min_seed_len) { // no funny things happening
 			kswr_t aln;
@@ -223,11 +223,11 @@ int mem_matesw(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, co
 			++n;
 		}
 #ifdef use_lwpf3
-    lwpf_start(l_mem_sort_dedup_patch);
+        lwpf_start(l_mem_sort_dedup_patch);
 #endif
 		if (n) ma->n = mem_sort_dedup_patch(opt, 0, 0, 0, ma->n, ma->a);
 #ifdef use_lwpf3
-    lwpf_stop(l_mem_sort_dedup_patch);
+        lwpf_stop(l_mem_sort_dedup_patch);
 #endif
 		if (rev) free(rev);
 		free(ref);

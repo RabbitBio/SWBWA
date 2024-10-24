@@ -46,7 +46,8 @@
 #  include "malloc_wrap.h"
 #endif
 
-#include<athread.h>
+#include <athread.h>
+#include <mpi.h>
 
 /* Theory on probability and scoring *ungapped* alignment
  *
@@ -1312,6 +1313,11 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 {
 	//extern void kt_for(int n_threads, void (*func)(void*,int,int), void *data, int n);
 	extern void kt_for_single(int n_threads, void (*func)(void*,int,int), void *data, int n);
+
+    int myrank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    //if(myrank) sleep(10);
+
 	worker_t w;
 	mem_pestat_t pes[4];
 	double ctime, rtime;
@@ -1376,7 +1382,7 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
     __real_athread_spawn((void*)slave_worker1_s_pre_fast, &para, 1);
     athread_join();
 # endif
-    fprintf(stderr, "slave pre done\n");
+    fprintf(stderr, "%d slave pre done\n", myrank);
     t_work1_2 += GetTime() - tt0;
       
     tt0 = GetTime();
@@ -1399,7 +1405,7 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
     __real_athread_spawn((void*)slave_worker1_s_fast, &para, 1);
     athread_join();
 # endif
-    fprintf(stderr, "slave round done\n");
+    fprintf(stderr, "%d slave round done\n", myrank);
     t_work1_4 += GetTime() - tt0;
 
     tt0 = GetTime();
@@ -1457,7 +1463,7 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 
     tt1 = GetTime();
 # ifdef use_cgs_mode
-    __real_athread_spawn_cgs((void*)slave_worker2_s, &para, 1);
+    __real_athread_spawn_cgs((void*)slave_worker2_s, &para2, 1);
     athread_join_cgs();
 # else
     __real_athread_spawn((void*)slave_worker2_s, &para2, 1);

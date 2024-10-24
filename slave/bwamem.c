@@ -1538,6 +1538,23 @@ int get_value_from_file(const char *filename) {
     return value;
 }
 
+typedef struct {
+    uint64_t state;
+} rng_t;
+
+void rng_init(rng_t *rng, uint64_t seed) {
+    rng->state = seed;
+}
+
+uint64_t rng_rand(rng_t *rng) {
+    uint64_t x = rng->state;
+    x ^= x << 13;
+    x ^= x >> 7;
+    x ^= x << 17;
+    rng->state = x;
+    return x;
+}
+
 
 __uncached long lock_s;
 void occ_bench(void *data) {
@@ -1546,12 +1563,22 @@ void occ_bench(void *data) {
     worker_t *w = (worker_t*)data;
     uint64_t l_p = w->bns->l_pac;
 
+	rng_t rng;
+    rng_init(&rng, 99991 * (_PEN + 1));
 	uint64_t N = 1ll << 22;
 	uint64_t pre_cnt = _PEN * rand() + rand();
+	int ggnum = 0;
     int cnt = 0;
     uint64_t cntt[4];
+	uint64_t pre_k = 0;
     for(uint64_t i = 0; i < N; i++) {
-        uint64_t k = (pre_cnt + pre_cnt / 991) % bench_addr_mod;
+		//uint64_t k = (pre_cnt + pre_cnt / 991) % bench_addr_mod;
+		uint64_t k = (pre_cnt + rng_rand(&rng)) % bench_addr_mod;
+		//if(fabs(pre_k - k) < 1024 * 1024) {
+		//    ggnum++;
+		//    fprintf(stderr, "GG pos %d %llu %llu %llu\n", i, pre_k, k, fabs(pre_k - k));
+		//}
+		//pre_k = k;
         //bench_bwt_occ4(w->bwt, k, &cnt);
         //pre_cnt += cnt;
         //if(i % 100000 == 0) fprintf(stderr, "k : %llu, cnt : %llu, pre_cnt %llu\n", k, cnt, pre_cnt);
@@ -1559,7 +1586,7 @@ void occ_bench(void *data) {
         pre_cnt += cntt[0] + cntt[1] + cntt[2] + cntt[3];
     }
     athread_lock(&lock_s);
-    fprintf(stderr, "slave%d pre_cnt is %llu\n", _PEN, pre_cnt);
+    fprintf(stderr, "slave%d pre_cnt is %llu, ggnum is %d\n", _PEN, pre_cnt, ggnum);
     athread_unlock(&lock_s);
 
 }

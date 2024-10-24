@@ -38,13 +38,15 @@
 #include "utils.h"
 #include "bntseq.h"
 #include "kseq.h"
+
 #include <athread.h>
+#include <mpi.h>
 KSEQ_DECLARE(gzFile)
 
 extern unsigned char nst_nt4_table[256];
 
 
-//#define use_lwpf3
+#define use_lwpf3
 
 #ifdef use_lwpf3
 #define LWPF_UNITS U(TEST)
@@ -193,6 +195,12 @@ static void update_a(mem_opt_t *opt, const mem_opt_t *opt0)
 
 int main_mem(int argc, char *argv[])
 {
+//#define use_my_mpi
+
+    int local_my_rank = 0;
+#ifdef use_my_mpi
+    MPI_Comm_rank(MPI_COMM_WORLD, &local_my_rank);
+#endif
 	mem_opt_t *opt, opt0;
 	int fd, fd2, i, c, ignore_alt = 0, no_mt_io = 0;
 	int fixed_chunk_size = -1;
@@ -239,10 +247,19 @@ int main_mem(int argc, char *argv[])
 		else if (c == 's') opt->split_width = atoi(optarg), opt0.split_width = 1;
 		else if (c == 'G') opt->max_chain_gap = atoi(optarg), opt0.max_chain_gap = 1;
 		else if (c == 'N') opt->max_chain_extend = atoi(optarg), opt0.max_chain_extend = 1;
-		else if (c == 'o' || c == 'f') file_out_sam = fopen(optarg, "wb");
+#ifdef use_my_mpi
+        else if (c == 'o' || c == 'f') {
+            char out_filename[256];
+            sprintf(out_filename, "%s_%d", optarg, local_my_rank);
+            file_out_sam = fopen(out_filename, "wb");
+            fprintf(stderr, "the output file is %s\n", out_filename);
+        }
+#else
+        else if (c == 'o' || c == 'f') file_out_sam = fopen(optarg, "wb");
+#endif
         //xreopen(optarg, "wb", stdout);
-		else if (c == 'W') opt->min_chain_weight = atoi(optarg), opt0.min_chain_weight = 1;
-		else if (c == 'y') opt->max_mem_intv = atol(optarg), opt0.max_mem_intv = 1;
+        else if (c == 'W') opt->min_chain_weight = atoi(optarg), opt0.min_chain_weight = 1;
+        else if (c == 'y') opt->max_mem_intv = atol(optarg), opt0.max_mem_intv = 1;
 		else if (c == 'C') aux.copy_comment = 1;
 		else if (c == 'K') fixed_chunk_size = atoi(optarg);
 		else if (c == 'X') opt->mask_level = atof(optarg);
@@ -422,7 +439,15 @@ int main_mem(int argc, char *argv[])
 		for (i = 0; i < aux.idx->bns->n_seqs; ++i)
 			aux.idx->bns->anns[i].is_alt = 0;
 
+#ifdef use_my_mpi
+    char in_filename1[256];
+    sprintf(in_filename1, "%s_%d", argv[optind + 1], local_my_rank + 1);
+    fprintf(stderr, "the input file1 is %s\n", in_filename1);
+	ko = kopen(in_filename1, &fd);
+#else
 	ko = kopen(argv[optind + 1], &fd);
+#endif
+    
 	if (ko == 0) {
 		if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, argv[optind + 1]);
 		return 1;
@@ -434,7 +459,14 @@ int main_mem(int argc, char *argv[])
 			if (bwa_verbose >= 2)
 				fprintf(stderr, "[W::%s] when '-p' is in use, the second query file is ignored.\n", __func__);
 		} else {
-			ko2 = kopen(argv[optind + 2], &fd2);
+#ifdef use_my_mpi
+            char in_filename2[256];
+            sprintf(in_filename2, "%s_%d", argv[optind + 2], local_my_rank + 1);
+            fprintf(stderr, "the input file2 is %s\n", in_filename2);
+            ko2 = kopen(in_filename2, &fd2);
+#else
+            ko2 = kopen(argv[optind + 2], &fd2);
+#endif
 			if (ko2 == 0) {
 				if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, argv[optind + 2]);
 				return 1;
@@ -486,12 +518,12 @@ int main_mem(int argc, char *argv[])
     t_tot += GetTime() - t0;
 
 
-    fprintf(stderr, "[timer] tot : %lf, step1 : %lf, step2 : %lf, step3 : %lf\n", t_tot, t_step1, t_step2, t_step3);
-    fprintf(stderr, "[timer] step2 --- work1 : %lf (1 : %lf, 2 : %lf, 3 : %lf, 4 : %lf, 5 : %lf, 6 : %lf), work2 : %lf (1 : %lf, 2 : %lf, 3 : %lf)\n", 
-            t_work1, t_work1_1, t_work1_2, t_work1_3, t_work1_4, t_work1_5, t_work1_6, t_work2, t_work2_1, t_work2_2, t_work2_3);
+    fprintf(stderr, "rank %d [timer] tot : %lf, step1 : %lf, step2 : %lf, step3 : %lf\n", local_my_rank, t_tot, t_step1, t_step2, t_step3);
+    fprintf(stderr, "rank %d [timer] step2 --- work1 : %lf (1 : %lf, 2 : %lf, 3 : %lf, 4 : %lf, 5 : %lf, 6 : %lf), work2 : %lf (1 : %lf, 2 : %lf, 3 : %lf)\n", 
+            local_my_rank, t_work1, t_work1_1, t_work1_2, t_work1_3, t_work1_4, t_work1_5, t_work1_6, t_work2, t_work2_1, t_work2_2, t_work2_3);
     long long s_reg_sum2 = 0;
-    fprintf(stderr, "[info] sum : %lld\n", s_reg_sum);
-    fprintf(stderr, "[info] avg  %lld \  %lld\n", s_px2, c_px2);
+    //fprintf(stderr, "[info] sum : %lld\n", s_reg_sum);
+    //fprintf(stderr, "[info] avg  %lld \  %lld\n", s_px2, c_px2);
 
 
 	free(hdr_line);

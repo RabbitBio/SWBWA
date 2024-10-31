@@ -1,4 +1,5 @@
 CC=		 	mpicc
+CXX= 	    mpicxx
 #CC=			clang --analyze
 CFLAGS= -w -g -Wall -Wno-unused-function -O2 -I/home/test/someGit/lwpf3
 #-fprofile-swperf
@@ -15,7 +16,7 @@ AOBJS=		bwashm.o bwase.o bwaseqio.o bwtgap.o bwtaln.o bamlite.o \
 			bwtsw2_chain.o fastmap.o bwtsw2_pair.o
 PROG=		bwa
 INCLUDES=	
-LIBS= -lm -lz -lpthread -lm_slave
+LIBS= -static -lm -lz -pthread -lm_slave
 #-lswperf
 SUBDIRS=	.
 
@@ -30,6 +31,10 @@ endif
 
 .SUFFIXES:.c .o .cc
 
+.cpp.o:
+		$(CXX) -mhost -fPIC -mieee -mftz -faddress_align=32 -c $(CFLAGS) $(DFLAGS) $(INCLUDES) $(CPPFLAGS) $< -o $@
+
+
 .c.o:
 		$(CC) -mhost -fPIC -mieee -mftz -faddress_align=32 -c $(CFLAGS) $(DFLAGS) $(INCLUDES) $(CPPFLAGS) $< -o $@
 
@@ -40,7 +45,7 @@ $(SLAVE_DIR)/%.o: $(SLAVE_DIR)/%.c
 all:$(PROG)
 
 bwa:libbwa.a $(AOBJS) main.o $(SLAVE_OBJECTS)
-		$(CC) -mhybrid $(CFLAGS) $(LDFLAGS) $(AOBJS) main.o $(SLAVE_OBJECTS) -o $@ -L. -lbwa $(LIBS)
+		$(CXX) -mhybrid $(CFLAGS) $(LDFLAGS) $(AOBJS) main.o $(SLAVE_OBJECTS) -o $@ -L. -lbwa $(LIBS)
 
 bwamem-lite:libbwa.a example.o
 		$(CC) $(CFLAGS) $(LDFLAGS) example.o -o $@ -L. -lbwa $(LIBS)

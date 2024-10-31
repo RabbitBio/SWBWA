@@ -50,7 +50,9 @@ void worker1_s_fast(Para_worker1_s *para) {
     lwpf_enter(TEST);
     lwpf_start(l_worker1_2);
 #endif
+    //if(_PEN) return;
     for(long i = global_pen; i < para->nn; i += cpe_num_slave) {
+    //for(long i = 0; i < para->nn; i++) {
         worker1_fast(para->data, i, global_pen, para->cpe_regs);
     }
 #ifdef use_lwpf3
@@ -72,8 +74,9 @@ void worker1_s_pre_fast(Para_worker1_s *para) {
     lwpf_enter(TEST);
     lwpf_start(l_worker1_1);
 #endif
-
+    //if(_PEN) return;
     for(long i = global_pen; i < para->nn; i += cpe_num_slave) {
+    //for(long i = 0; i < para->nn; i++) {
         worker1_pre_fast(para->data, i, global_pen, para->cpe_regs);
     }
 #ifdef use_lwpf3

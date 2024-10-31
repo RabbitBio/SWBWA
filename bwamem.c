@@ -1314,6 +1314,11 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 	//extern void kt_for(int n_threads, void (*func)(void*,int,int), void *data, int n);
 	extern void kt_for_single(int n_threads, void (*func)(void*,int,int), void *data, int n);
 
+    //if(bwt->sa_intv != 32) {
+    //    fprintf(stderr, "bwt->sa_intv != 32\n");
+    //    exit(0);
+    //}
+
     int myrank;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     //if(myrank) sleep(10);

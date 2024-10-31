@@ -57,8 +57,10 @@ extern unsigned char nst_nt4_table[256];
 
 double t_tot = 0;
 double t_step1 = 0;
+double t_step1_1 = 0;
 double t_step2 = 0;
 double t_step3 = 0;
+double t_step3_1 = 0;
 
 double t_work1 = 0;
 double t_work2 = 0;
@@ -84,8 +86,8 @@ long long s_px2 = 0;
 
 void *kopen(const char *fn, int *_fd);
 int kclose(void *a);
-//void kt_pipeline(int n_threads, void *(*func)(void*, int, void*), void *shared_data, int n_steps);
-void kt_pipeline_single(int n_threads, void *(*func)(void*, int, void*), void *shared_data, int n_steps);
+void kt_pipeline(int n_threads, void *(*func)(void*, int, void*), void *shared_data, int n_steps);
+//void kt_pipeline_single(int n_threads, void *(*func)(void*, int, void*), void *shared_data, int n_steps);
 
 
 FILE *file_out_sam = NULL;
@@ -115,7 +117,9 @@ static void *process(void *shared, int step, void *_data)
 		ktp_data_t *ret;
 		int64_t size = 0;
 		ret = calloc(1, sizeof(ktp_data_t));
+        double t1 = GetTime();
 		ret->seqs = bseq_read(aux->actual_chunk_size, &ret->n_seqs, aux->ks, aux->ks2);
+        t_step1_1 += GetTime() - t1;
 		if (ret->seqs == 0) {
 			free(ret);
             t_step1 += GetTime() - t0;
@@ -155,7 +159,9 @@ static void *process(void *shared, int step, void *_data)
 					data->seqs[sep[1][i].id].sam = sep[1][i].sam;
 			}
 			free(sep[0]); free(sep[1]);
-		} else mem_process_seqs(opt, idx->bwt, idx->bns, idx->pac, aux->n_processed, data->n_seqs, data->seqs, aux->pes0);
+		} else {
+            mem_process_seqs(opt, idx->bwt, idx->bns, idx->pac, aux->n_processed, data->n_seqs, data->seqs, aux->pes0);
+        }
 		aux->n_processed += data->n_seqs;
         t_step2 += GetTime() - t0;
 		return data;
@@ -163,7 +169,9 @@ static void *process(void *shared, int step, void *_data)
         double t0 = GetTime();
 		for (i = 0; i < data->n_seqs; ++i) {
             if(file_out_sam != NULL) {
+                double t1 = GetTime();
 			    if (data->seqs[i].sam) err_fputs(data->seqs[i].sam, file_out_sam);
+                t_step3_1 += GetTime() - t1;
             }
 			//if (data->seqs[i].sam) err_fputs(data->seqs[i].sam, stdout);
 			free(data->seqs[i].name); free(data->seqs[i].comment);
@@ -496,7 +504,14 @@ int main_mem(int argc, char *argv[])
     lwpf_init(NULL);
 #endif
     
-    kt_pipeline_single(1, process, &aux, 3);
+    if(aux.idx->bwt->sa_intv != 32) {
+        fprintf(stderr, "bwt->sa_intv != 32\n");
+        exit(0);
+    }
+
+
+    //kt_pipeline_single(1, process, &aux, 3);
+    kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
 
 #ifdef use_lwpf3
     FILE *file = fopen("lwpf.log", "w");
@@ -518,8 +533,8 @@ int main_mem(int argc, char *argv[])
     t_tot += GetTime() - t0;
 
 
-    fprintf(stderr, "rank %d [timer] tot : %lf, step1 : %lf, step2 : %lf, step3 : %lf\n", local_my_rank, t_tot, t_step1, t_step2, t_step3);
-    fprintf(stderr, "rank %d [timer] step2 --- work1 : %lf (1 : %lf, 2 : %lf, 3 : %lf, 4 : %lf, 5 : %lf, 6 : %lf), work2 : %lf (1 : %lf, 2 : %lf, 3 : %lf)\n", 
+    fprintf(stderr, "rank %d [timer] tot : %.2f, step1 : %.2f (%.2f), step2 : %.2f, step3 : %.2f (%.2f)\n", local_my_rank, t_tot, t_step1, t_step1_1, t_step2, t_step3, t_step3_1);
+    fprintf(stderr, "rank %d [timer] step2 --- work1 : %.2f (1 : %.2f, 2 : %.2f, 3 : %.2f, 4 : %.2f, 5 : %.2f, 6 : %.2f), work2 : %.2f (1 : %.2f, 2 : %.2f, 3 : %.2f)\n", 
             local_my_rank, t_work1, t_work1_1, t_work1_2, t_work1_3, t_work1_4, t_work1_5, t_work1_6, t_work2, t_work2_1, t_work2_2, t_work2_3);
     long long s_reg_sum2 = 0;
     //fprintf(stderr, "[info] sum : %lld\n", s_reg_sum);

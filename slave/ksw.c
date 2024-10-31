@@ -80,7 +80,7 @@ kswq_t *ksw_qinit(int size, int qlen, const uint8_t *query, int m, const int8_t 
 
 	size = size > 1? 2 : 1;
 	p = 8 * (3 - size); // # values per __m128i
-#ifdef use_2_int8
+#if defined(use_2_int8) || defined(use_float16_vec)
     // TODO p << 2 ?
     p <<= 1;
 #endif
@@ -109,6 +109,8 @@ kswq_t *ksw_qinit(int size, int qlen, const uint8_t *query, int m, const int8_t 
 		//int8_t *t = (int8_t*)q->qp;
 #ifdef use_2_int8
 		int16_t *t = (int16_t*)q->qp;
+#elif defined(use_float16_vec)
+		_Float16 *t = (_Float16*)q->qp;
 #else
 		int *t = (int*)q->qp;
 #endif
@@ -165,7 +167,7 @@ kswr_t ksw_u8(kswq_t *q, int tlen, const uint8_t *target, int _o_del, int _e_del
 #define allzero_16(xx) (m128i_allzero((xx)))
 #endif
 
-#ifdef use_2_int8
+#if defined(use_2_int8) || defined(use_float16_vec)
     const int p_new = 32;
 #else
     const int p_new = 16;
@@ -260,6 +262,8 @@ end_loop16:
 		//uint8_t *t = (uint8_t*)Hmax;
 #ifdef use_2_int8
 		uint16_t *t = (uint16_t*)Hmax;
+#elif defined(use_float16_vec)
+        _Float16 *t = (_Float16*)Hmax;
 #else
 		int *t = (int*)Hmax;
 #endif

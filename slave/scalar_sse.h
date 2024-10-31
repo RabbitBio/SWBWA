@@ -6,6 +6,120 @@
 #include <string.h>
 #include "simd.h"
 
+//#define use_float16_vec
+
+# ifdef use_float16_vec
+
+typedef union m128i {
+    float16v32 val;
+} __m128i;
+
+
+static inline __m128i _mm_set1_epi32(int32_t n) {
+	assert(n >= 0 && n <= 255);
+	__m128i r;
+    r.val = 1.0f * n;
+    return r;
+}
+
+int is_valid_address(void* ptr) {
+    uintptr_t addr = (uintptr_t)ptr;
+    if ((addr & 0xFF0000000000) != 0x400000000000) {
+        return 0;
+    }
+    if ((addr & 0x3F) != 0) {
+        return 0;
+    }
+    return 1;
+}
+
+static inline __m128i _mm_load_si128(const __m128i *ptr) {
+	_Float16* new_ptr = (_Float16*)ptr;
+	//if(is_valid_address(new_ptr) == 0) {
+	//	fprintf(stderr, "GG load ptr %p\n", new_ptr);
+	//}
+    __m128i r;
+    simd_load(r.val, new_ptr); 
+    return r; 
+}
+static inline void _mm_store_si128(__m128i *ptr, __m128i a) { 
+	//_Float16* new_ptr = (_Float16*)ptr;
+	//if(is_valid_address(new_ptr) == 0) {
+	//	fprintf(stderr, "GG store ptr %p\n", new_ptr);
+	//}
+    simd_store(a.val, ptr);
+}
+
+static inline int m128i_allzero(__m128i a) {
+    //intv16 xx = a.val;
+    //xx = simd_vbisw(xx, simd_sllx(xx, 8 * 32));
+    //xx = simd_vbisw(xx, simd_sllx(xx, 4 * 32));
+    //xx = simd_vbisw(xx, simd_sllx(xx, 2 * 32));
+    //xx = simd_vbisw(xx, simd_sllx(xx, 1 * 32));
+    //return simd_vextw15(xx) == 0;
+
+    _Float16 val[32];
+    simd_store(a.val, &(val[0]));
+    for(int i = 0; i < 32; i++) {
+        if(fabs(val[i]) > 1e-3) return 0;
+    }
+	return 1;
+}
+
+static inline __m128i _mm_slli_si128(__m128i a, int n) {
+    _Float16 val[32];
+    simd_store(a.val, &(val[0]));
+    memmove(&val[n], &val[0], sizeof(int) * (32 - n));
+    for (int i = 0; i < n; i++) val[i] = 0;
+    __m128i r;
+    simd_load(r.val, &val[0]);
+    //__m128i r;
+    //r.val = simd_sllx(a.val, n * 32);
+	return r;
+}
+
+static inline __m128i _mm_max_epu8(__m128i a, __m128i b) {
+    a.val = simd_smaxh(a.val, b.val);
+	return a;
+}
+
+static inline __m128i _mm_min_epu8(__m128i a, __m128i b) {
+    a.val = simd_sminh(a.val, b.val);
+    return a;
+}
+
+
+static inline uint8_t m128i_max_u8(__m128i a) {
+    _Float16 val[32];
+    simd_store(a.val, &(val[0]));
+	_Float16 max = 0;
+	for (int i = 0; i < 32; i++)
+		if (max < val[i]) max = val[i];
+	return (uint8_t)max;
+}
+
+static inline __m128i _mm_set1_epi8(int8_t n) {
+	__m128i r;
+    r.val = 1.0f * n;
+    return r;
+}
+
+static inline __m128i _mm_adds_epu8(__m128i a, __m128i b) {
+    static float16v32 con_255 = 255.0f;
+    a.val = simd_vaddh(a.val, b.val);
+    a.val = simd_sminh(a.val, con_255);
+	return a;
+}
+
+static inline __m128i _mm_subs_epu8(__m128i a, __m128i b) {
+    static float16v32 con_0 = 0.0f;
+    a.val = simd_vsubh(a.val, b.val);
+    a.val = simd_smaxh(a.val, con_0);
+	return a;
+}
+
+
+# else
 typedef union m128i {
     intv16 val;
 } __m128i;
@@ -18,9 +132,9 @@ uintv16 v_max = 0xFFFFFFFF;
 intv16 v_low8 = 255;
 intv16 v_mid8 = 255 << 16;
 
-#define my_int int16_t
+#  define my_int int16_t
 
-#ifdef use_2_int8
+#  ifdef use_2_int8
 static inline __m128i _mm_set1_epi32(int32_t n) {
 	assert(n >= 0 && n <= 255);
 	__m128i r;
@@ -258,7 +372,7 @@ static inline __m128i _mm_subs_epu8(__m128i a, __m128i b) {
     //simd_load(r.val, &(val1[0])); 
 	//return r;
 }
-#else
+#  else
 static inline __m128i _mm_set1_epi32(int32_t n) {
 	assert(n >= 0 && n <= 255);
 	__m128i r;
@@ -422,7 +536,8 @@ static inline __m128i _mm_subs_epu8(__m128i a, __m128i b) {
     //simd_load(a.val, &(val[0])); 
 	return a;
 }
-#endif
+#  endif
+# endif
 
 static inline __m128i _mm_adds_epi16(__m128i a, __m128i b) {
     fprintf(stderr, "TODO\n");
@@ -461,5 +576,6 @@ static inline __m128i _mm_subs_epu16(__m128i a, __m128i b) {
     exit(0);
 	return a;
 }
+
 
 #endif

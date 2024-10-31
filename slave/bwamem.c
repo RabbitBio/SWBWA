@@ -451,6 +451,36 @@ mem_chain_v mem_chain(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 
 
     lwpf_start(l_my_btree_chain);
+
+    //static long mem_cnt = 0;
+    //static long k_cnt = 0;
+    //static int cntt_0 = 0;
+    //cntt_0++;
+
+    //int64_t reg_pos[3000];
+    //int reg_num = 0;
+    //int now_pos = 0;
+    //for (i = 0; i < aux->mem.n; ++i) {
+	//	bwtintv_t *p = &aux->mem.a[i];
+	//	int step, count, slen = (uint32_t)p->info - (p->info>>32); // seed length
+	//	int64_t k;
+	//	// if (slen < opt->min_seed_len) continue; // ignore if too short or too repetitive
+	//	step = p->x[2] > opt->max_occ? p->x[2] / opt->max_occ : 1;
+	//	for (k = count = 0; k < p->x[2] && count < opt->max_occ; k += step, ++count) {
+    //        lwpf_start(l_my_btree_sa);
+    //        //reg_num++;
+	//		reg_pos[reg_num++] = bwt_sa(bwt, p->x[0] + k); // this is the base coordinate in the forward-reverse reference
+    //        if(reg_num == 3000) {
+    //            fprintf(stderr, "GGGGGGGGGGGGGGG %d\n", reg_num);
+    //        }
+    //        lwpf_stop(l_my_btree_sa);
+    //    }
+    //}
+    //if(reg_num >= 2222) fprintf(stderr, "GGGGGGGGGGGGGGG %d\n", reg_num);
+		
+
+
+    //mem_cnt += aux->mem.n; 
 	for (i = 0; i < aux->mem.n; ++i) {
 		bwtintv_t *p = &aux->mem.a[i];
 		int step, count, slen = (uint32_t)p->info - (p->info>>32); // seed length
@@ -458,11 +488,14 @@ mem_chain_v mem_chain(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 		// if (slen < opt->min_seed_len) continue; // ignore if too short or too repetitive
 		step = p->x[2] > opt->max_occ? p->x[2] / opt->max_occ : 1;
 		for (k = count = 0; k < p->x[2] && count < opt->max_occ; k += step, ++count) {
+            //k_cnt++;
 			mem_chain_t tmp, *lower, *upper;
 			mem_seed_t s;
 			int rid, to_add = 0;
             lwpf_start(l_my_btree_sa);
+            //k_cnt++;
 			s.rbeg = tmp.pos = bwt_sa(bwt, p->x[0] + k); // this is the base coordinate in the forward-reverse reference
+			//s.rbeg = tmp.pos = reg_pos[now_pos++];
             lwpf_stop(l_my_btree_sa);
 			s.qbeg = p->info>>32;
 			s.score= s.len = slen;
@@ -491,6 +524,7 @@ mem_chain_v mem_chain(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 			}
 		}
 	}
+    //if(cntt_0 % 10000 == 0) fprintf(stderr, "%d [mem_cnt] %.3f, [k_cnt] %.3f\n", cntt_0, 1.0 * mem_cnt / cntt_0, 1.0 * k_cnt / cntt_0);
     lwpf_stop(l_my_btree_chain);
 
     lwpf_start(l_my_btree_free);

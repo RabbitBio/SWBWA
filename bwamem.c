@@ -103,12 +103,10 @@ extern long long s_px2;
 
 extern void SLAVE_FUN(get_occ_bench());
 
-extern void SLAVE_FUN(worker1_s_init());
 extern void SLAVE_FUN(worker1_s_fast());
-extern void SLAVE_FUN(worker1_s());
-extern void SLAVE_FUN(worker1_s_pre());
 extern void SLAVE_FUN(worker1_s_pre_fast());
-extern void SLAVE_FUN(worker2_s());
+extern void SLAVE_FUN(worker2_s_fast());
+extern void SLAVE_FUN(worker2_s_pre_fast());
 
 
 typedef struct{
@@ -121,6 +119,8 @@ typedef struct{
 typedef struct{
     long nn;
     void* data;
+    char** cpe_sams;
+    int *sam_lens;
 } Para_worker2_s;
 
 
@@ -1314,15 +1314,10 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 	//extern void kt_for(int n_threads, void (*func)(void*,int,int), void *data, int n);
 	extern void kt_for_single(int n_threads, void (*func)(void*,int,int), void *data, int n);
 
-    //if(bwt->sa_intv != 32) {
-    //    fprintf(stderr, "bwt->sa_intv != 32\n");
-    //    exit(0);
-    //}
+    int my_rank = 0;
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
 
-    int myrank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-    //if(myrank) sleep(10);
-
+    //athread_init();
 	worker_t w;
 	mem_pestat_t pes[4];
 	double ctime, rtime;
@@ -1369,7 +1364,6 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
     double tt0;
 #ifdef bwt_sa_slave
     tt0 = GetTime();
-    //athread_init();
     c_px2++;
     s_px2 += nn;
     Para_worker1_s para;
@@ -1387,7 +1381,7 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
     __real_athread_spawn((void*)slave_worker1_s_pre_fast, &para, 1);
     athread_join();
 # endif
-    fprintf(stderr, "%d slave pre done\n", myrank);
+    fprintf(stderr, "slave pre done\n");
     t_work1_2 += GetTime() - tt0;
       
     tt0 = GetTime();
@@ -1395,7 +1389,7 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
         w.regs[i].m = para.cpe_regs[i].n;
         w.regs[i].a = malloc(sizeof(mem_alnreg_t) * w.regs[i].m);
         if(w.regs[i].a == NULL) {
-            fprintf(stderr, "GG malloc %d %d null\n", i, para.cpe_regs[i].n);
+            fprintf(stderr, "rank %d GG malloc %d size : %d = %d (%d) x %d null\n", my_rank, i, sizeof(mem_alnreg_t) * w.regs[i].m, para.cpe_regs[i].n, w.regs[i].m, sizeof(mem_alnreg_t));
             exit(0);
         }
         w.regs[i].n = 0;
@@ -1410,11 +1404,10 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
     __real_athread_spawn((void*)slave_worker1_s_fast, &para, 1);
     athread_join();
 # endif
-    fprintf(stderr, "%d slave round done\n", myrank);
+    fprintf(stderr, "slave round done\n");
     t_work1_4 += GetTime() - tt0;
 
     tt0 = GetTime();
-    //athread_halt();
     free(para.cpe_regs);
     t_work1_5 += GetTime() - tt0;
 
@@ -1441,40 +1434,36 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 #ifdef bwt_sa_slave2
 
     double tt1 = GetTime();
-    //athread_init();
     Para_worker2_s para2;
     para2.nn = nn;
     para2.data = (void*)&w;
-    static int sam_opt_cnt = 0;
-    static char** const_sams;
-    sam_opt_cnt++;
-    if(sam_opt_cnt == 1) {
-        int ngs_mx_len = 0;
-        for(int i = 0; i < n; i++) {
-            if(w.seqs[i].l_seq > ngs_mx_len) ngs_mx_len = w.seqs[i].l_seq;
-        }
-        const_sams = malloc(n * 2 * sizeof(char*));
-        for(int i = 0; i < n; i++) {
-            const_sams[i] = malloc((ngs_mx_len << 6) * sizeof(char) + 1);
-            memset(const_sams[i], 'A', (ngs_mx_len << 6) * sizeof(char));
-        }
-    }
+    para2.cpe_sams = (char**)malloc(n * sizeof(char*));
+    para2.sam_lens = (int*)malloc(n * sizeof(int));
 
-    for(int i = 0; i < n; i++) {
-        w.seqs[i].sam = const_sams[i];
-        w.seqs[i].sam[(w.seqs[i].l_seq << 6)] = '\0';
-    }
+# ifdef use_cgs_mode
+    __real_athread_spawn_cgs((void*)slave_worker2_s_pre_fast, &para2, 1);
+    athread_join_cgs();
+# else
+    __real_athread_spawn((void*)slave_worker2_s_pre_fast, &para2, 1);
+    athread_join();
+# endif
+
+
     t_work2_1 += GetTime() - tt1;
 
     tt1 = GetTime();
+    for(int i = 0; i < n; i++) {
+        w.seqs[i].sam = malloc((para2.sam_lens[i]) * sizeof(char) + 1);
+        memset(w.seqs[i].sam, 'A', (para2.sam_lens[i]) * sizeof(char));
+        w.seqs[i].sam[(para2.sam_lens[i])] = '\0';
+    }
 # ifdef use_cgs_mode
-    __real_athread_spawn_cgs((void*)slave_worker2_s, &para2, 1);
+    __real_athread_spawn_cgs((void*)slave_worker2_s_fast, &para2, 1);
     athread_join_cgs();
 # else
-    __real_athread_spawn((void*)slave_worker2_s, &para2, 1);
+    __real_athread_spawn((void*)slave_worker2_s_fast, &para2, 1);
     athread_join();
 # endif
-    //athread_halt();
     t_work2_2 += GetTime() - tt1;
 
     tt1 = GetTime();
@@ -1489,9 +1478,12 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 //	kt_for_single(opt->n_threads, worker2, &w, (opt->flag&MEM_F_PE)? n>>1 : n); // generate alignment
 #endif
 
+    //athread_halt();
 
     t_work2 += GetTime() - t0;
 	free(w.regs);
+    free(para2.sam_lens);
+    free(para2.cpe_sams);
 	if (bwa_verbose >= 3)
 		fprintf(stderr, "[M::%s] Processed %d reads in %.3f CPU sec, %.3f real sec\n", __func__, n, cputime() - ctime, realtime() - rtime);
 }

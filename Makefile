@@ -1,7 +1,7 @@
 CC=		 	mpicc
 CXX= 	    mpicxx
 #CC=			clang --analyze
-CFLAGS= -w -g -Wall -Wno-unused-function -O2 -I/home/test/someGit/lwpf3
+CFLAGS= -w -g -Wall -Wno-unused-function -O2 -I/home/export/online1/mdt00/shisuan/sweq/ylf/someGit/lwpf3
 #-fprofile-swperf
 #CFLAGS=		-g -Wall -Wno-unused-function
 #WRAP_MALLOC=-DUSE_MALLOC_WRAPPERS
@@ -16,7 +16,7 @@ AOBJS=		bwashm.o bwase.o bwaseqio.o bwtgap.o bwtaln.o bamlite.o \
 			bwtsw2_chain.o fastmap.o bwtsw2_pair.o
 PROG=		bwa
 INCLUDES=	
-LIBS= -static -lm -lz -pthread -lm_slave
+LIBS= -static -lm -lz -lpthread -lm_slave
 #-lswperf
 SUBDIRS=	.
 
@@ -32,7 +32,7 @@ endif
 .SUFFIXES:.c .o .cc
 
 .cpp.o:
-		$(CXX) -mhost -fPIC -mieee -mftz -faddress_align=32 -c $(CFLAGS) $(DFLAGS) $(INCLUDES) $(CPPFLAGS) $< -o $@
+		$(CXX) -mhost -fPIC -mieee -mftz -faddress_align=32 -c $(CFLAGS) -std=c++11 $(DFLAGS) $(INCLUDES) $(CPPFLAGS) $< -o $@
 
 
 .c.o:

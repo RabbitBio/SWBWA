@@ -136,12 +136,10 @@ extern "C" {
 #endif
 
     void occ_bench(void *data);
-    void worker1_init(void *data, int i, int tid);
-    void worker1_pre(void *data, int i, int tid, int* real_size);
     void worker1_pre_fast(void *data, int i, int tid, mem_alnreg_v* cpe_regs);
-    void worker1(void *data, int i, int tid);
     void worker1_fast(void *data, int i, int tid, mem_alnreg_v* cpe_regs);
-    void worker2(void *data, int i, int tid);
+    void worker2_pre_fast(void *data, int i, int tid, int *sam_lens, char **cpe_sams);
+    void worker2_fast(void *data, int i, int tid, int *sam_lens, char **cpe_sams);
 	smem_i *smem_itr_init(const bwt_t *bwt);
 	void smem_itr_destroy(smem_i *itr);
 	void smem_set_query(smem_i *itr, int len, const uint8_t *query);

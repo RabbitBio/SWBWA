@@ -16,6 +16,8 @@ typedef struct{
 typedef struct{
     long nn;
     void* data;
+    char** cpe_sams;
+    int *sam_lens;
 } Para_worker2_s;
 
 void get_occ_bench(Para_worker1_s *para) {
@@ -32,18 +34,6 @@ void get_occ_bench(Para_worker1_s *para) {
 #define global_pen (_PEN)
 #endif
 
-
-void worker1_s_init(Para_worker1_s *para) {
-    for(long i = global_pen; i < para->nn; i += cpe_num_slave) {
-        worker1_init(para->data, i, global_pen);
-    }
-}
-
-void worker1_s(Para_worker1_s *para) {
-    for(long i = global_pen; i < para->nn; i += cpe_num_slave) {
-        worker1(para->data, i, global_pen);
-    }
-}
 
 void worker1_s_fast(Para_worker1_s *para) {
 #ifdef use_lwpf3
@@ -62,13 +52,9 @@ void worker1_s_fast(Para_worker1_s *para) {
 }
 
 
-void worker1_s_pre(Para_worker1_s *para) {
-    for(long i = global_pen; i < para->nn; i += cpe_num_slave) {
-        worker1_pre(para->data, i, global_pen, para->real_sizes);
-    }
-}
-
 void worker1_s_pre_fast(Para_worker1_s *para) {
+
+    //if(_PEN == 0) fprintf(stderr, "start CG %d\n", _CGN);
 
 #ifdef use_lwpf3
     lwpf_enter(TEST);
@@ -87,16 +73,31 @@ void worker1_s_pre_fast(Para_worker1_s *para) {
 
 
 
-void worker2_s(Para_worker2_s *para) {
+void worker2_s_pre_fast(Para_worker2_s *para) {
 #ifdef use_lwpf3
     lwpf_enter(TEST);
-    lwpf_start(l_worker2);
+    lwpf_start(l_worker2_1);
 #endif
     for(long i = global_pen; i < para->nn; i += cpe_num_slave) {
-        worker2(para->data, i, global_pen);
+        worker2_pre_fast(para->data, i, global_pen, para->sam_lens, para->cpe_sams);
     }
 #ifdef use_lwpf3
-    lwpf_stop(l_worker2);
+    lwpf_stop(l_worker2_1);
+    lwpf_exit(TEST);
+#endif
+}
+
+
+void worker2_s_fast(Para_worker2_s *para) {
+#ifdef use_lwpf3
+    lwpf_enter(TEST);
+    lwpf_start(l_worker2_2);
+#endif
+    for(long i = global_pen; i < para->nn; i += cpe_num_slave) {
+        worker2_fast(para->data, i, global_pen, para->sam_lens, para->cpe_sams);
+    }
+#ifdef use_lwpf3
+    lwpf_stop(l_worker2_2);
     lwpf_exit(TEST);
 #endif
 }

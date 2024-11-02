@@ -1467,29 +1467,6 @@ void worker1_pre_fast(void *data, int i, int tid, mem_alnreg_v* cpe_regs)
 	}
 }
 
-void worker1_pre(void *data, int i, int tid, int* real_sizes)
-{
-	worker_t *w = (worker_t*)data;
-	if (!(w->opt->flag&MEM_F_PE)) {
-        mem_alnreg_v reg; 
-		if(bwa_verbose >= 4) printf("=====> Processing read '%s' <=====\n", w->seqs[i].name);
-		reg = mem_align1_core(i, w->opt, w->bwt, w->bns, w->pac, w->seqs[i].l_seq, w->seqs[i].seq, w->aux[tid]);
-        real_sizes[i] = reg.n;
-        free(reg.a);
-	} else {
-        mem_alnreg_v reg; 
-		if (bwa_verbose >= 4) printf("=====> Processing read '%s'/1 <=====\n", w->seqs[i<<1|0].name);
-		reg = mem_align1_core(i * 2, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|0].l_seq, w->seqs[i<<1|0].seq, w->aux[tid]);
-        real_sizes[i<<1|0] = reg.n;
-        free(reg.a);
-
-		if (bwa_verbose >= 4) printf("=====> Processing read '%s'/2 <=====\n", w->seqs[i<<1|1].name);
-        reg = mem_align1_core(i * 2 + 1, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|1].l_seq, w->seqs[i<<1|1].seq, w->aux[tid]);
-        real_sizes[i<<1|1] = reg.n;
-        free(reg.a);
-	}
-}
-
 void worker1_fast(void *data, int i, int tid, mem_alnreg_v* cpe_regs)
 {
 	worker_t *w = (worker_t*)data;
@@ -1505,49 +1482,6 @@ void worker1_fast(void *data, int i, int tid, mem_alnreg_v* cpe_regs)
         memcpy(w->regs[i<<1|1].a, cpe_regs[i<<1|1].a, cpe_regs[i<<1|1].n * sizeof(mem_alnreg_t));
         w->regs[i<<1|1].n = cpe_regs[i<<1|1].n;
         free(cpe_regs[i<<1|1].a);
-	}
-}
-
-
-void worker1(void *data, int i, int tid)
-{
-	worker_t *w = (worker_t*)data;
-	if (!(w->opt->flag&MEM_F_PE)) {
-        mem_alnreg_v reg; 
-		if (bwa_verbose >= 4) printf("=====> Processing read '%s' <=====\n", w->seqs[i].name);
-		reg = mem_align1_core(i, w->opt, w->bwt, w->bns, w->pac, w->seqs[i].l_seq, w->seqs[i].seq, w->aux[tid]);
-        if(reg.n > w->regs[i].m) {
-            fprintf(stderr, "size GG %zu > %zu\n", reg.n, w->regs[i].m);
-            exit(0);
-        } else {
-            w->regs[i].n = reg.n;
-            for(int j = 0; j < reg.n; j++) w->regs[i].a[j] = reg.a[j];
-        }
-        free(reg.a);
-	} else {
-        mem_alnreg_v reg; 
-
-		if (bwa_verbose >= 4) printf("=====> Processing read '%s'/1 <=====\n", w->seqs[i<<1|0].name);
-		reg = mem_align1_core(i * 2, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|0].l_seq, w->seqs[i<<1|0].seq, w->aux[tid]);
-        if(reg.n > w->regs[i<<1|0].m) {
-            fprintf(stderr, "size GG %zu > %zu\n", reg.n, w->regs[i<<1|0].m);
-            exit(0);
-        } else {
-            w->regs[i<<1|0].n = reg.n;
-            for(int j = 0; j < reg.n; j++) w->regs[i<<1|0].a[j] = reg.a[j];
-        }
-        free(reg.a);
-
-		if (bwa_verbose >= 4) printf("=====> Processing read '%s'/2 <=====\n", w->seqs[i<<1|1].name);
-        reg = mem_align1_core(i * 2 + 1, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|1].l_seq, w->seqs[i<<1|1].seq, w->aux[tid]);
-        if(reg.n > w->regs[i<<1|1].m) {
-            fprintf(stderr, "size GG %zu > %zu\n", reg.n, w->regs[i<<1|1].m);
-            exit(0);
-        } else {
-            w->regs[i<<1|1].n = reg.n;
-            for(int j = 0; j < reg.n; j++) w->regs[i<<1|1].a[j] = reg.a[j];
-        }
-        free(reg.a);
 	}
 }
 
@@ -1625,32 +1559,8 @@ void occ_bench(void *data) {
 
 }
 
-void worker1_init(void *data, int i, int tid)
-{
-	worker_t *w = (worker_t*)data;
-	if (!(w->opt->flag&MEM_F_PE)) {
-		if (bwa_verbose >= 4) printf("=====> Processing read '%s' <=====\n", w->seqs[i].name);
-		w->regs[i] = mem_align1_core(i, w->opt, w->bwt, w->bns, w->pac, w->seqs[i].l_seq, w->seqs[i].seq, w->aux[tid]);
-	} else {
 
-		if (bwa_verbose >= 4) printf("=====> Processing read '%s'/1 <=====\n", w->seqs[i<<1|0].name);
-		w->regs[i<<1|0] = mem_align1_core(i * 2, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|0].l_seq, w->seqs[i<<1|0].seq, w->aux[tid]);
-
-		if (bwa_verbose >= 4) printf("=====> Processing read '%s'/2 <=====\n", w->seqs[i<<1|1].name);
-        w->regs[i<<1|1] = mem_align1_core(i * 2 + 1, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|1].l_seq, w->seqs[i<<1|1].seq, w->aux[tid]);
-        //for(int j = 0; j < w->regs[i<<1|1].n; j++) {
-        //    mem_alnreg_t *aln = &(w->regs[i<<1|1].a[j]);
-        //    if(aln->score < 0 ||  aln->score > 10000) {
-        //        fprintf(stderr, "%d-%d: mem_alnreg_t: rb=%ld, re=%ld, qb=%d, qe=%d, rid=%d, score=%d, truesc=%d, sub=%d, alt_sc=%d, csub=%d, sub_n=%d, w=%d, seedcov=%d, secondary=%d, secondary_all=%d, seedlen0=%d, n_comp=%d, is_alt=%d, frac_rep=%f, hash=%lu\n",
-        //                i<<1|1, j, aln->rb, aln->re, aln->qb, aln->qe, aln->rid, aln->score, aln->truesc, aln->sub, aln->alt_sc, aln->csub, aln->sub_n, aln->w, aln->seedcov, aln->secondary, aln->secondary_all, aln->seedlen0, aln->n_comp, aln->is_alt, aln->frac_rep, aln->hash);
-        //    }
-
-        //}
-	}
-}
-
-
-void worker2(void *data, int i, int tid)
+void worker2_pre_fast(void *data, int i, int tid, int *sam_lens, char **cpe_sams)
 {
     extern int mem_sam_pe(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, const mem_pestat_t pes[4], uint64_t id, bseq1_t s[2], mem_alnreg_v a[2]);
     extern void mem_reg2ovlp(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, bseq1_t *s, mem_alnreg_v *a);
@@ -1667,7 +1577,7 @@ void worker2(void *data, int i, int tid)
         if (bwa_verbose >= 4) printf("=====> Finalizing read pair '%s' <=====\n", w->seqs[i<<1|0].name);
 
 #ifdef use_lwpf3
-    lwpf_start(l_2_pre);
+        lwpf_start(l_2_pre);
 #endif
         mem_alnreg_v tmp_reg[2];
         for(int id = 0; id < 2; id++) {
@@ -1722,51 +1632,53 @@ void worker2(void *data, int i, int tid)
         }
 
 #ifdef use_lwpf3
-    lwpf_stop(l_2_pre);
+        lwpf_stop(l_2_pre);
 #endif
 
 	
 
 
 #ifdef use_lwpf3
-    lwpf_start(l_2_mem);
+        lwpf_start(l_2_mem);
 #endif
      
 //        mem_sam_pe(w->opt, w->bns, w->pac, w->pes, (w->n_processed>>1) + i, &w->seqs[i<<1], &w->regs[i<<1]);
         mem_sam_pe(w->opt, w->bns, w->pac, w->pes, (w->n_processed>>1) + i, tmp_seq, tmp_reg);
 
 #ifdef use_lwpf3
-    lwpf_stop(l_2_mem);
+        lwpf_stop(l_2_mem);
 #endif
      
 
 #ifdef use_lwpf3
-    lwpf_start(l_2_after);
+        lwpf_start(l_2_after);
 #endif
      
         for(int id = 0; id < 2; id++) {
 
 #ifdef use_lwpf3
-    lwpf_start(l_2_after_1);
+            lwpf_start(l_2_after_1);
 #endif
             //int mpe_sam_len = strlen(w->seqs[i<<1|id].sam);
             //assert(mpe_sam_len == (w->seqs[i<<1|id].l_seq << 6));
-            int mpe_sam_len = w->seqs[i<<1|id].l_seq << 6;
+//            int mpe_sam_len = w->seqs[i<<1|id].l_seq << 6;
 #ifdef use_lwpf3
-    lwpf_stop(l_2_after_1);
+            lwpf_stop(l_2_after_1);
 #endif
 
 #ifdef use_lwpf3
-    lwpf_start(l_2_after_2);
+            lwpf_start(l_2_after_2);
 #endif
             int cpe_sam_len = strlen(tmp_seq[id].sam);
-            if(cpe_sam_len + 1 > mpe_sam_len) {
-                fprintf(stderr, "%d cpe_sam_len > mpe_sam_len, %d %d\n", i<<1|id, cpe_sam_len, mpe_sam_len);
-                exit(0);
-            }
+//            if(cpe_sam_len + 1 > mpe_sam_len) {
+//                fprintf(stderr, "%d cpe_sam_len > mpe_sam_len, %d %d\n", i<<1|id, cpe_sam_len, mpe_sam_len);
+//                exit(0);
+//            }
+            cpe_sams[i<<1|id] = tmp_seq[id].sam;
+            sam_lens[i<<1|id] = cpe_sam_len;
 
-            memcpy(w->seqs[i<<1|id].sam, tmp_seq[id].sam, cpe_sam_len * sizeof(char));
-            w->seqs[i<<1|id].sam[cpe_sam_len] = '\0';
+//            memcpy(w->seqs[i<<1|id].sam, tmp_seq[id].sam, cpe_sam_len * sizeof(char));
+//            w->seqs[i<<1|id].sam[cpe_sam_len] = '\0';
             //if(strlen(w->seqs[i<<1|id].name) != strlen(tmp_seq[id].name)) {
             //    fprintf(stderr, "name len GG, %lu %lu\n", strlen(w->seqs[i<<1|id].name), strlen(tmp_seq[id].name));
             //    exit(0);
@@ -1785,20 +1697,20 @@ void worker2(void *data, int i, int tid)
             //    exit(0);
             //}
 #ifdef use_lwpf3
-    lwpf_stop(l_2_after_2);
+            lwpf_stop(l_2_after_2);
 #endif
 
 #ifdef use_lwpf3
-    lwpf_start(l_2_after_3);
+            lwpf_start(l_2_after_3);
 #endif
             if(tmp_reg[id].a) free(tmp_reg[id].a);
             if(tmp_seq[id].name) free(tmp_seq[id].name);
             if(tmp_seq[id].comment) free(tmp_seq[id].comment);
             if(tmp_seq[id].seq) free(tmp_seq[id].seq);
             if(tmp_seq[id].qual) free(tmp_seq[id].qual);
-            if(tmp_seq[id].sam) free(tmp_seq[id].sam);
+//            if(tmp_seq[id].sam) free(tmp_seq[id].sam);
 #ifdef use_lwpf3
-    lwpf_stop(l_2_after_3);
+            lwpf_stop(l_2_after_3);
 #endif
         }
     }
@@ -1810,37 +1722,29 @@ void worker2(void *data, int i, int tid)
 }
 
 
+void worker2_fast(void *data, int i, int tid, int *sam_lens, char **cpe_sams)
+{
+    extern int mem_sam_pe(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, const mem_pestat_t pes[4], uint64_t id, bseq1_t s[2], mem_alnreg_v a[2]);
+    extern void mem_reg2ovlp(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, bseq1_t *s, mem_alnreg_v *a);
+    worker_t *w = (worker_t*)data;
+    if (!(w->opt->flag&MEM_F_PE)) {
+        fprintf("stderr", "TODO and test\n");
+        exit(0);
+    } else {
+        if (bwa_verbose >= 4) printf("=====> Finalizing read pair '%s' <=====\n", w->seqs[i<<1|0].name);
+
+        for(int id = 0; id < 2; id++) {
+
+            memcpy(w->seqs[i<<1|id].sam, cpe_sams[i<<1|id], sam_lens[i<<1|id] * sizeof(char));
+            w->seqs[i<<1|id].sam[sam_lens[i<<1|id]] = '\0';
+
+            if(cpe_sams[i<<1|id]) free(cpe_sams[i<<1|id]);
+        }
+    }
+}
+
 
 void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bns, const uint8_t *pac, int64_t n_processed, int n, bseq1_t *seqs, const mem_pestat_t *pes0)
 {
-	//extern void kt_for(int n_threads, void (*func)(void*,int,int), void *data, int n);
-	extern void kt_for_single(int n_threads, void (*func)(void*,int,int), void *data, int n);
-	worker_t w;
-	mem_pestat_t pes[4];
-	double ctime, rtime;
-	int i;
 
-	ctime = cputime(); rtime = realtime();
-	global_bns = bns;
-	w.regs = malloc(n * sizeof(mem_alnreg_v));
-	w.opt = opt; w.bwt = bwt; w.bns = bns; w.pac = pac;
-	w.seqs = seqs; w.n_processed = n_processed;
-	w.pes = &pes[0];
-	w.aux = malloc(opt->n_threads * sizeof(smem_aux_t));
-	for (i = 0; i < opt->n_threads; ++i)
-		w.aux[i] = smem_aux_init();
-	//kt_for(opt->n_threads, worker1, &w, (opt->flag&MEM_F_PE)? n>>1 : n); // find mapping positions
-	kt_for_single(opt->n_threads, worker1, &w, (opt->flag&MEM_F_PE)? n>>1 : n); // find mapping positions
-	for (i = 0; i < opt->n_threads; ++i)
-		smem_aux_destroy(w.aux[i]);
-	free(w.aux);
-	if (opt->flag&MEM_F_PE) { // infer insert sizes if not provided
-		if (pes0) memcpy(pes, pes0, 4 * sizeof(mem_pestat_t)); // if pes0 != NULL, set the insert-size distribution as pes0
-		else mem_pestat(opt, bns->l_pac, n, w.regs, pes); // otherwise, infer the insert size distribution from data
-	}
-	//kt_for(opt->n_threads, worker2, &w, (opt->flag&MEM_F_PE)? n>>1 : n); // generate alignment
-	kt_for_single(opt->n_threads, worker2, &w, (opt->flag&MEM_F_PE)? n>>1 : n); // generate alignment
-	free(w.regs);
-	if (bwa_verbose >= 3)
-		fprintf(stderr, "[M::%s] Processed %d reads in %.3f CPU sec, %.3f real sec\n", __func__, n, cputime() - ctime, realtime() - rtime);
 }

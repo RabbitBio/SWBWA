@@ -87,7 +87,8 @@ long long s_px2 = 0;
 void *kopen(const char *fn, int *_fd);
 int kclose(void *a);
 void kt_pipeline(int n_threads, void *(*func)(void*, int, void*), void *shared_data, int n_steps);
-//void kt_pipeline_single(int n_threads, void *(*func)(void*, int, void*), void *shared_data, int n_steps);
+void kt_pipeline_single(int n_threads, void *(*func)(void*, int, void*), void *shared_data, int n_steps);
+void kt_pipeline_thread(int n_threads, void *(*func)(void*, int, void*), void *shared_data, int n_steps);
 
 
 FILE *file_out_sam = NULL;
@@ -176,7 +177,7 @@ static void *process(void *shared, int step, void *_data)
 			//if (data->seqs[i].sam) err_fputs(data->seqs[i].sam, stdout);
 			free(data->seqs[i].name); free(data->seqs[i].comment);
 			free(data->seqs[i].seq); free(data->seqs[i].qual);
-            //free(data->seqs[i].sam);
+            free(data->seqs[i].sam);
 		}
 		free(data->seqs); free(data);
         t_step3 += GetTime() - t0;
@@ -203,7 +204,7 @@ static void update_a(mem_opt_t *opt, const mem_opt_t *opt0)
 
 int main_mem(int argc, char *argv[])
 {
-//#define use_my_mpi
+#define use_my_mpi
 
     int local_my_rank = 0;
 #ifdef use_my_mpi
@@ -486,7 +487,6 @@ int main_mem(int argc, char *argv[])
 	}
 	//bwa_print_sam_hdr(aux.idx->bns, hdr_line);
 	aux.actual_chunk_size = fixed_chunk_size > 0? fixed_chunk_size : opt->chunk_size * opt->n_threads;
-	//kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
     double t0 = GetTime();
 
 
@@ -510,8 +510,9 @@ int main_mem(int argc, char *argv[])
     }
 
 
-    //kt_pipeline_single(1, process, &aux, 3);
-    kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
+    if(no_mt_io) kt_pipeline_single(1, process, &aux, 3);
+    else kt_pipeline_queue(3, process, &aux, 3);
+    //kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
 
 #ifdef use_lwpf3
     FILE *file = fopen("lwpf.log", "w");

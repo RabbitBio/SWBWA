@@ -881,6 +881,8 @@ void mem_chain2aln(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac
 	uint8_t *rseq = 0;
 	uint64_t *srt;
 
+
+    lwpf_start(l_chain2aln1);
 	if (c->n == 0) return;
 	// get the max possible span
 	rmax[0] = l_pac<<1; rmax[1] = 0;
@@ -907,6 +909,8 @@ void mem_chain2aln(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac
 	for (i = 0; i < c->n; ++i)
 		srt[i] = (uint64_t)c->seeds[i].score<<32 | i;
 	ks_introsort_64(c->n, srt);
+
+    lwpf_stop(l_chain2aln1);
 
 	for (k = c->n - 1; k >= 0; --k) {
 		mem_alnreg_t *a;
@@ -956,6 +960,8 @@ void mem_chain2aln(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac
 		a->rid = c->rid;
 
 		if (bwa_verbose >= 4) err_printf("** ---> Extending from seed(%d) [%ld;%ld,%ld] @ %s <---\n", k, (long)s->len, (long)s->qbeg, (long)s->rbeg, bns->anns[c->rid].name);
+
+        lwpf_start(l_chain2aln2);
 		if (s->qbeg) { // left extension
 			uint8_t *rs, *qs;
 			int qle, tle, gtle, gscore;
@@ -972,7 +978,9 @@ void mem_chain2aln(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac
 					printf("*** Left ref:   "); for (j = 0; j < tmp; ++j) putchar("ACGTN"[(int)rs[j]]); putchar('\n');
 					printf("*** Left query: "); for (j = 0; j < s->qbeg; ++j) putchar("ACGTN"[(int)qs[j]]); putchar('\n');
 				}
+                lwpf_start(l_2aln_ksw1);
 				a->score = ksw_extend2(s->qbeg, qs, tmp, rs, 5, opt->mat, opt->o_del, opt->e_del, opt->o_ins, opt->e_ins, aw[0], opt->pen_clip5, opt->zdrop, s->len * opt->a, &qle, &tle, &gtle, &gscore, &max_off[0]);
+                lwpf_stop(l_2aln_ksw1);
 				if (bwa_verbose >= 4) { printf("*** Left extension: prev_score=%d; score=%d; bandwidth=%d; max_off_diagonal_dist=%d\n", prev, a->score, aw[0], max_off[0]); fflush(stdout); }
 				if (a->score == prev || max_off[0] < (aw[0]>>1) + (aw[0]>>2)) break;
 			}
@@ -986,7 +994,9 @@ void mem_chain2aln(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac
 			}
 			free(qs); free(rs);
 		} else a->score = a->truesc = s->len * opt->a, a->qb = 0, a->rb = s->rbeg;
+        lwpf_stop(l_chain2aln2);
 
+        lwpf_start(l_chain2aln3);
 		if (s->qbeg + s->len != l_query) { // right extension
 			int qle, tle, qe, re, gtle, gscore, sc0 = a->score;
 			qe = s->qbeg + s->len;
@@ -1000,7 +1010,10 @@ void mem_chain2aln(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac
 					printf("*** Right ref:   "); for (j = 0; j < rmax[1] - rmax[0] - re; ++j) putchar("ACGTN"[(int)rseq[re+j]]); putchar('\n');
 					printf("*** Right query: "); for (j = 0; j < l_query - qe; ++j) putchar("ACGTN"[(int)query[qe+j]]); putchar('\n');
 				}
-				a->score = ksw_extend2(l_query - qe, query + qe, rmax[1] - rmax[0] - re, rseq + re, 5, opt->mat, opt->o_del, opt->e_del, opt->o_ins, opt->e_ins, aw[1], opt->pen_clip3, opt->zdrop, sc0, &qle, &tle, &gtle, &gscore, &max_off[1]);
+
+                lwpf_start(l_2aln_ksw2);
+                a->score = ksw_extend2(l_query - qe, query + qe, rmax[1] - rmax[0] - re, rseq + re, 5, opt->mat, opt->o_del, opt->e_del, opt->o_ins, opt->e_ins, aw[1], opt->pen_clip3, opt->zdrop, sc0, &qle, &tle, &gtle, &gscore, &max_off[1]);
+                lwpf_stop(l_2aln_ksw2);
 				if (bwa_verbose >= 4) { printf("*** Right extension: prev_score=%d; score=%d; bandwidth=%d; max_off_diagonal_dist=%d\n", prev, a->score, aw[1], max_off[1]); fflush(stdout); }
 				if (a->score == prev || max_off[1] < (aw[1]>>1) + (aw[1]>>2)) break;
 			}
@@ -1013,6 +1026,7 @@ void mem_chain2aln(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac
 				a->truesc += gscore - sc0;
 			}
 		} else a->qe = l_query, a->re = s->rbeg + s->len;
+        lwpf_stop(l_chain2aln3);
 		if (bwa_verbose >= 4) printf("*** Added alignment region: [%d,%d) <=> [%ld,%ld); score=%d; {left,right}_bandwidth={%d,%d}\n", a->qb, a->qe, (long)a->rb, (long)a->re, a->score, aw[0], aw[1]);
 
 		// compute seedcov
@@ -1559,6 +1573,7 @@ void occ_bench(void *data) {
 
 }
 
+//#define use_ldm_for_worker2
 
 void worker2_pre_fast(void *data, int i, int tid, int *sam_lens, char **cpe_sams)
 {
@@ -1583,7 +1598,12 @@ void worker2_pre_fast(void *data, int i, int tid, int *sam_lens, char **cpe_sams
         for(int id = 0; id < 2; id++) {
             tmp_reg[id].n = w->regs[i<<1|id].n;
             tmp_reg[id].m = w->regs[i<<1|id].m;
+#ifdef use_ldm_for_worker2
+            //tmp_reg[id].a = ldm_malloc(tmp_reg[id].m * sizeof(mem_alnreg_t));
             tmp_reg[id].a = malloc(tmp_reg[id].m * sizeof(mem_alnreg_t));
+#else
+            tmp_reg[id].a = malloc(tmp_reg[id].m * sizeof(mem_alnreg_t));
+#endif
             memcpy(tmp_reg[id].a, w->regs[i<<1|id].a, tmp_reg[id].n * sizeof(mem_alnreg_t));
         }
 
@@ -1599,7 +1619,11 @@ void worker2_pre_fast(void *data, int i, int tid, int *sam_lens, char **cpe_sams
             int qual_len = w->seqs[i<<1|id].qual ? strlen(w->seqs[i<<1|id].qual) : 0;
 
             if (name_len > 0) {
+#ifdef use_ldm_for_worker2
+                tmp_seq[id].name = ldm_malloc((name_len + 1) * sizeof(char));
+#else
                 tmp_seq[id].name = malloc((name_len + 1) * sizeof(char));
+#endif
                 memcpy(tmp_seq[id].name, w->seqs[i<<1|id].name, name_len * sizeof(char));
                 tmp_seq[id].name[name_len] = '\0';
             } else {
@@ -1607,7 +1631,11 @@ void worker2_pre_fast(void *data, int i, int tid, int *sam_lens, char **cpe_sams
             }
 
             if (comment_len > 0) {
+#ifdef use_ldm_for_worker2
+                tmp_seq[id].comment = ldm_malloc((comment_len + 1) * sizeof(char));
+#else
                 tmp_seq[id].comment = malloc((comment_len + 1) * sizeof(char));
+#endif
                 memcpy(tmp_seq[id].comment, w->seqs[i<<1|id].comment, comment_len * sizeof(char));
                 tmp_seq[id].comment[comment_len] = '\0';
             } else {
@@ -1615,7 +1643,11 @@ void worker2_pre_fast(void *data, int i, int tid, int *sam_lens, char **cpe_sams
             }
 
             if (seq_len > 0) {
+#ifdef use_ldm_for_worker2
+                tmp_seq[id].seq = ldm_malloc((seq_len + 1) * sizeof(char));
+#else
                 tmp_seq[id].seq = malloc((seq_len + 1) * sizeof(char));
+#endif
                 memcpy(tmp_seq[id].seq, w->seqs[i<<1|id].seq, seq_len * sizeof(char));
                 tmp_seq[id].seq[seq_len] = '\0';
             } else {
@@ -1623,7 +1655,11 @@ void worker2_pre_fast(void *data, int i, int tid, int *sam_lens, char **cpe_sams
             }
 
             if (qual_len > 0) {
+#ifdef use_ldm_for_worker2
+                tmp_seq[id].qual = ldm_malloc((qual_len + 1) * sizeof(char));
+#else
                 tmp_seq[id].qual = malloc((qual_len + 1) * sizeof(char));
+#endif
                 memcpy(tmp_seq[id].qual, w->seqs[i<<1|id].qual, qual_len * sizeof(char));
                 tmp_seq[id].qual[qual_len] = '\0';
             } else {
@@ -1703,11 +1739,26 @@ void worker2_pre_fast(void *data, int i, int tid, int *sam_lens, char **cpe_sams
 #ifdef use_lwpf3
             lwpf_start(l_2_after_3);
 #endif
+
+#ifdef use_ldm_for_worker2
+            int name_len = w->seqs[i<<1|id].name ? strlen(w->seqs[i<<1|id].name) : 0;
+            int comment_len = w->seqs[i<<1|id].comment ? strlen(w->seqs[i<<1|id].comment) : 0;
+            int seq_len = w->seqs[i<<1|id].l_seq;
+            int qual_len = w->seqs[i<<1|id].qual ? strlen(w->seqs[i<<1|id].qual) : 0;
+
+            //if(tmp_reg[id].a) ldm_free(tmp_reg[id].a, tmp_reg[id].m * sizeof(mem_alnreg_t));
+            if(tmp_reg[id].a) free(tmp_reg[id].a);
+            if(tmp_seq[id].name) ldm_free(tmp_seq[id].name, (name_len + 1) * sizeof(char));
+            if(tmp_seq[id].comment) ldm_free(tmp_seq[id].comment, (comment_len + 1) * sizeof(char));
+            if(tmp_seq[id].seq) ldm_free(tmp_seq[id].seq, (seq_len + 1) * sizeof(char));
+            if(tmp_seq[id].qual) ldm_free(tmp_seq[id].qual, (qual_len + 1) * sizeof(char));
+#else
             if(tmp_reg[id].a) free(tmp_reg[id].a);
             if(tmp_seq[id].name) free(tmp_seq[id].name);
             if(tmp_seq[id].comment) free(tmp_seq[id].comment);
             if(tmp_seq[id].seq) free(tmp_seq[id].seq);
             if(tmp_seq[id].qual) free(tmp_seq[id].qual);
+#endif
 //            if(tmp_seq[id].sam) free(tmp_seq[id].sam);
 #ifdef use_lwpf3
             lwpf_stop(l_2_after_3);

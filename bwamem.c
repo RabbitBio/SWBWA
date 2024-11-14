@@ -98,7 +98,7 @@ extern long long s_px2;
 
 #define bwt_sa_slave
 
-#define bwt_sa_slave2
+//#define bwt_sa_slave2
 
 
 extern void SLAVE_FUN(get_occ_bench());
@@ -1307,7 +1307,7 @@ static void worker2(void *data, int i, int tid)
 }
 
 
-//#define use_cgs_mode
+#define use_cgs_mode
 
 void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bns, const uint8_t *pac, int64_t n_processed, int n, bseq1_t *seqs, const mem_pestat_t *pes0)
 {
@@ -1370,6 +1370,10 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
     para.nn = nn;
     para.data = (void*)&w;
     para.cpe_regs = (mem_alnreg_v*)malloc(n * sizeof(mem_alnreg_v));
+    for(int i = 0; i < n; i++) {
+        para.cpe_regs[i].n = 0;
+        para.cpe_regs[i].m = 0;
+    }
     t_work1_1 += GetTime() - tt0;
 
 
@@ -1433,13 +1437,14 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
     t0 = GetTime();
 #ifdef bwt_sa_slave2
 
-    double tt1 = GetTime();
     Para_worker2_s para2;
     para2.nn = nn;
     para2.data = (void*)&w;
     para2.cpe_sams = (char**)malloc(n * sizeof(char*));
     para2.sam_lens = (int*)malloc(n * sizeof(int));
+    for(int i = 0; i < n; i++) para2.sam_lens[i] = 0;
 
+    double tt1 = GetTime();
 # ifdef use_cgs_mode
     __real_athread_spawn_cgs((void*)slave_worker2_s_pre_fast, &para2, 1);
     athread_join_cgs();
@@ -1470,6 +1475,8 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
     for(int i = 0; i < n; i++) {
         free(w.regs[i].a);
     }
+    free(para2.sam_lens);
+    free(para2.cpe_sams);
     t_work2_3 += GetTime() - tt1;
 #else
     for(int i = 0; i < nn; i++) {
@@ -1482,8 +1489,6 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 
     t_work2 += GetTime() - t0;
 	free(w.regs);
-    free(para2.sam_lens);
-    free(para2.cpe_sams);
 	if (bwa_verbose >= 3)
 		fprintf(stderr, "[M::%s] Processed %d reads in %.3f CPU sec, %.3f real sec\n", __func__, n, cputime() - ctime, realtime() - rtime);
 }

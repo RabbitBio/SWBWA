@@ -58,6 +58,7 @@ extern unsigned char nst_nt4_table[256];
 double t_tot = 0;
 double t_step1 = 0;
 double t_step1_1 = 0;
+double t_step1_1_1 = 0;
 double t_step2 = 0;
 double t_step3 = 0;
 double t_step3_1 = 0;
@@ -204,7 +205,7 @@ static void update_a(mem_opt_t *opt, const mem_opt_t *opt0)
 
 int main_mem(int argc, char *argv[])
 {
-#define use_my_mpi
+//#define use_my_mpi
 
     int local_my_rank = 0;
 #ifdef use_my_mpi
@@ -490,8 +491,8 @@ int main_mem(int argc, char *argv[])
     double t0 = GetTime();
 
 
-    athread_init();
-    //athread_init_cgs();
+    //athread_init();
+    athread_init_cgs();
 
 
 #ifdef use_swlu
@@ -504,10 +505,10 @@ int main_mem(int argc, char *argv[])
     lwpf_init(NULL);
 #endif
     
-    if(aux.idx->bwt->sa_intv != 32) {
-        fprintf(stderr, "bwt->sa_intv != 32\n");
-        exit(0);
-    }
+    //if(aux.idx->bwt->sa_intv != 32) {
+    //    fprintf(stderr, "bwt->sa_intv != 32\n");
+    //    exit(0);
+    //}
 
 
     if(no_mt_io) kt_pipeline_single(1, process, &aux, 3);
@@ -515,7 +516,9 @@ int main_mem(int argc, char *argv[])
     //kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
 
 #ifdef use_lwpf3
-    FILE *file = fopen("lwpf.log", "w");
+    char filename[50];
+    sprintf(filename, "lwpf_%d.log", local_my_rank);
+    FILE *file = fopen(filename, "w");
     if (file == NULL) {
         perror("Failed to open lwpf.log");
         return 1;
@@ -534,7 +537,7 @@ int main_mem(int argc, char *argv[])
     t_tot += GetTime() - t0;
 
 
-    fprintf(stderr, "rank %d [timer] tot : %.2f, step1 : %.2f (%.2f), step2 : %.2f, step3 : %.2f (%.2f)\n", local_my_rank, t_tot, t_step1, t_step1_1, t_step2, t_step3, t_step3_1);
+    fprintf(stderr, "rank %d [timer] tot : %.2f, step1 : %.2f (%.2f [%.2f]), step2 : %.2f, step3 : %.2f (%.2f)\n", local_my_rank, t_tot, t_step1, t_step1_1, t_step1_1 - t_step1_1_1, t_step2, t_step3, t_step3_1);
     fprintf(stderr, "rank %d [timer] step2 --- work1 : %.2f (1 : %.2f, 2 : %.2f, 3 : %.2f, 4 : %.2f, 5 : %.2f, 6 : %.2f), work2 : %.2f (1 : %.2f, 2 : %.2f, 3 : %.2f)\n", 
             local_my_rank, t_work1, t_work1_1, t_work1_2, t_work1_3, t_work1_4, t_work1_5, t_work1_6, t_work2, t_work2_1, t_work2_2, t_work2_3);
     long long s_reg_sum2 = 0;

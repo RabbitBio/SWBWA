@@ -101,18 +101,20 @@ bwtint_t bwt_sa(const bwt_t *bwt, bwtint_t k)
     //static int cntt_1 = 0;
     //cntt_1++;
 
-	//bwtint_t sa = 0, mask = bwt->sa_intv - 1;
-	bwtint_t sa = 0, mask = 31;
+	bwtint_t sa = 0, mask = bwt->sa_intv - 1;
+	//bwtint_t sa = 0, mask = 31;
 	while (k & mask) {
 		++sa;
 		k = bwt_invPsi(bwt, k);
+        //if(_PEN == 0 && cntt_1 < 100) fprintf(stderr, "%llu ", k);
         //sa_cnt++;
 	}
+    //if(_PEN == 0 && cntt_1 < 100) fprintf(stderr, "\n");
     //if(cntt_1 % 100000 == 0) fprintf(stderr, "%d [sa_cnt] %.3f\n", cntt_1, 1.0 * sa_cnt / cntt_1);
 	/* without setting bwt->sa[0] = -1, the following line should be
 	   changed to (sa + bwt->sa[k/bwt->sa_intv]) % (bwt->seq_len + 1) */
-    //bwtint_t res = sa + bwt->sa[k/bwt->sa_intv];
-    bwtint_t res = sa + bwt->sa[k >> 5];
+    bwtint_t res = sa + bwt->sa[k/bwt->sa_intv];
+    //bwtint_t res = sa + bwt->sa[k >> 5];
 	return res;
 }
 

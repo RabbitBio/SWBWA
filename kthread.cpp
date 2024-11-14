@@ -7,9 +7,13 @@
 #include <cstdlib>
 #include <cstdint>
 #include <climits>
+#include <pthread.h>
+#include <sched.h>
+#include <cstring>
 
 #include <atomic>
 #include <cassert>
+#include <mpi.h>
 
 
 /************
@@ -140,7 +144,7 @@ extern "C" void kt_pipeline_single(int n_threads, void* (*func)(void*, int, void
 
 using DataType = void*;
 
-const int queue_item_limit = 4;
+const int queue_item_limit = 1;
 
 
 
@@ -155,11 +159,35 @@ struct MyQueue {
     std::atomic_int q_num;
 };
 
+int get_target_cpu() {
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    return rank;
+}
+
+void set_thread_affinity(int cpu_id) {
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(cpu_id, &cpuset);
+
+    pthread_t thread = pthread_self();
+    int result = pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
+    if (result != 0) {
+        std::cerr << "Error setting CPU affinity: " << strerror(result) << std::endl;
+    }
+}
+
+std::mutex mtx;
 
 void reader_thread(ktp_t* p, MyQueue& queue, std::atomic<bool>& done_reading) {
+    //set_thread_affinity(get_target_cpu());
     DataType data = nullptr;
     while (true) {
-        data = p->func(p->shared, 0, nullptr);
+
+        {
+            //std::lock_guard<std::mutex> lock(mtx);
+            data = p->func(p->shared, 0, nullptr);
+        }
         if (data == nullptr) break;
 
         while (queue.q_num >= queue_item_limit) {
@@ -174,6 +202,7 @@ void reader_thread(ktp_t* p, MyQueue& queue, std::atomic<bool>& done_reading) {
 
 
 void processor_thread(ktp_t* p, MyQueue& read_queue, MyQueue& write_queue, std::atomic<bool>& done_reading, std::atomic<bool>& done_processing) {
+    //set_thread_affinity(get_target_cpu());
     DataType item = nullptr;
     bool overWhile = 0;
     while (true) {
@@ -189,7 +218,8 @@ void processor_thread(ktp_t* p, MyQueue& read_queue, MyQueue& write_queue, std::
         read_queue.q_num--;
         printf("step2 get %p\n", item);
 
-        DataType processed_data = p->func(p->shared, 1, item);
+        DataType processed_data = item;
+        processed_data = p->func(p->shared, 1, item);
         printf("step2 put %p\n", processed_data);
 
         while (write_queue.q_num >= queue_item_limit) {
@@ -202,6 +232,7 @@ void processor_thread(ktp_t* p, MyQueue& read_queue, MyQueue& write_queue, std::
 }
 
 void writer_thread(ktp_t* p, MyQueue& queue, std::atomic<bool>& done_processing) {
+    //set_thread_affinity(get_target_cpu());
     DataType item = nullptr;
     bool overWhile = 0;
     while (true) {
@@ -216,7 +247,10 @@ void writer_thread(ktp_t* p, MyQueue& queue, std::atomic<bool>& done_processing)
         item = queue.q_data[queue.q_p1++];
         queue.q_num--;
         printf("step3 %p\n", item);
-        p->func(p->shared, 2, item);
+        {
+            //std::lock_guard<std::mutex> lock(mtx);
+            p->func(p->shared, 2, item);
+        }
     }
 }
 
@@ -244,14 +278,14 @@ extern "C" void kt_pipeline_queue(int n_threads, void* (*func)(void*, int, void*
     std::atomic<bool> done_reading{false};
     std::atomic<bool> done_processing{false};
 
-    printf("threads start\n");
-
     std::thread reader(reader_thread, &aux, std::ref(read_queue), std::ref(done_reading));
-    std::thread processor(processor_thread, &aux, std::ref(read_queue), std::ref(write_queue), std::ref(done_reading), std::ref(done_processing));
+    //std::thread processor(processor_thread, &aux, std::ref(read_queue), std::ref(write_queue), std::ref(done_reading), std::ref(done_processing));
     std::thread writer(writer_thread, &aux, std::ref(write_queue), std::ref(done_processing));
 
+    processor_thread(&aux, read_queue, write_queue, done_reading, done_processing);
+
     reader.join();
-    processor.join();
+    //processor.join();
     writer.join();
 
 

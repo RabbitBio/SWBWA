@@ -514,12 +514,14 @@ mem_chain_v mem_chain(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 			} else to_add = 1;
 			if (to_add) { // add the seed as a new chain
                 lwpf_start(l_my_btree_add);
+                //asm("my_label_start:");
 				tmp.n = 1; tmp.m = 4;
 				tmp.seeds = calloc(tmp.m, sizeof(mem_seed_t));
 				tmp.seeds[0] = s;
 				tmp.rid = rid;
 				tmp.is_alt = !!bns->anns[rid].is_alt;
 				kb_putp(chn, tree, &tmp);
+                //asm("my_label_end:");
                 lwpf_stop(l_my_btree_add);
 			}
 		}

@@ -41,12 +41,13 @@
 
 #include <athread.h>
 #include <mpi.h>
-KSEQ_DECLARE(gzFile)
+//KSEQ_DECLARE(gzFile)
+KSEQ_DECLARE(int)
 
 extern unsigned char nst_nt4_table[256];
 
 
-#define use_lwpf3
+//#define use_lwpf3
 
 #ifdef use_lwpf3
 #define LWPF_UNITS U(TEST)
@@ -54,11 +55,14 @@ extern unsigned char nst_nt4_table[256];
 #endif
 
 
+double t_malloc = 0;
+double t_free = 0;
 
 double t_tot = 0;
 double t_step1 = 0;
 double t_step1_1 = 0;
 double t_step1_1_1 = 0;
+double t_step1_read = 0;
 double t_step2 = 0;
 double t_step3 = 0;
 double t_step3_1 = 0;
@@ -77,6 +81,8 @@ double t_work1_6 = 0;
 double t_work2_1 = 0;
 double t_work2_2 = 0;
 double t_work2_3 = 0;
+double t_work2_4 = 0;
+double t_work2_5 = 0;
 
 double t_extend = 0;
 double t_bwt_sa = 0;
@@ -93,6 +99,8 @@ void kt_pipeline_thread(int n_threads, void *(*func)(void*, int, void*), void *s
 
 
 FILE *file_out_sam = NULL;
+int file_out_fd = -1;
+char sam_out_file_name[256];
 
 typedef struct {
 	kseq_t *ks, *ks2;
@@ -170,11 +178,13 @@ static void *process(void *shared, int step, void *_data)
 	} else if (step == 2) {
         double t0 = GetTime();
 		for (i = 0; i < data->n_seqs; ++i) {
-            if(file_out_sam != NULL) {
-                double t1 = GetTime();
-			    if (data->seqs[i].sam) err_fputs(data->seqs[i].sam, file_out_sam);
-                t_step3_1 += GetTime() - t1;
-            }
+            //if(file_out_sam != NULL) {
+            //if(file_out_fd != 0) {
+            double t1 = GetTime();
+            //if (data->seqs[i].sam) err_fputs(data->seqs[i].sam, file_out_sam);
+            if (data->seqs[i].sam) my_align_write(data->seqs[i].sam, file_out_fd, 0);
+            t_step3_1 += GetTime() - t1;
+            //}
 			//if (data->seqs[i].sam) err_fputs(data->seqs[i].sam, stdout);
 			free(data->seqs[i].name); free(data->seqs[i].comment);
 			free(data->seqs[i].seq); free(data->seqs[i].qual);
@@ -183,7 +193,9 @@ static void *process(void *shared, int step, void *_data)
 		free(data->seqs); free(data);
         t_step3 += GetTime() - t0;
 		return 0;
-	}
+	} else if(step == 3) {
+        my_align_write(NULL, file_out_fd, 1, sam_out_file_name);
+    }
 	return 0;
 }
 
@@ -214,7 +226,7 @@ int main_mem(int argc, char *argv[])
 	mem_opt_t *opt, opt0;
 	int fd, fd2, i, c, ignore_alt = 0, no_mt_io = 0;
 	int fixed_chunk_size = -1;
-	gzFile fp, fp2 = 0;
+	//gzFile fp, fp2 = 0;
 	char *p, *rg_line = 0, *hdr_line = 0;
 	const char *mode = 0;
 	void *ko = 0, *ko2 = 0;
@@ -259,13 +271,26 @@ int main_mem(int argc, char *argv[])
 		else if (c == 'N') opt->max_chain_extend = atoi(optarg), opt0.max_chain_extend = 1;
 #ifdef use_my_mpi
         else if (c == 'o' || c == 'f') {
-            char out_filename[256];
-            sprintf(out_filename, "%s_%d", optarg, local_my_rank);
-            file_out_sam = fopen(out_filename, "wb");
-            fprintf(stderr, "the output file is %s\n", out_filename);
+            sprintf(sam_out_file_name, "%s_%d", optarg, local_my_rank);
+            //file_out_sam = fopen(sam_out_file_name, "wb");
+            file_out_fd = open(sam_out_file_name, O_CREAT | O_RDWR | O_DIRECT, 0666);
+            if (file_out_fd == -1) {
+                perror("Failed to open file");
+                fprintf(stderr, "Error code: %d\n", errno);
+            }
+            fprintf(stderr, "the output file is %s\n", sam_out_file_name);
         }
 #else
-        else if (c == 'o' || c == 'f') file_out_sam = fopen(optarg, "wb");
+        else if (c == 'o' || c == 'f') {
+            //file_out_sam = fopen(optarg, "wb");
+            sprintf(sam_out_file_name, "%s", optarg);
+            file_out_fd = open(sam_out_file_name, O_CREAT | O_RDWR | O_DIRECT, 0666);
+            if (file_out_fd == -1) {
+                perror("Failed to open file");
+                fprintf(stderr, "Error code: %d\n", errno);
+            }
+            fprintf(stderr, "the output file is %s\n", sam_out_file_name);
+        }
 #endif
         //xreopen(optarg, "wb", stdout);
         else if (c == 'W') opt->min_chain_weight = atoi(optarg), opt0.min_chain_weight = 1;
@@ -449,9 +474,13 @@ int main_mem(int argc, char *argv[])
 		for (i = 0; i < aux.idx->bns->n_seqs; ++i)
 			aux.idx->bns->anns[i].is_alt = 0;
 
+
+    int in_rank = local_my_rank + 1;
+    //int in_rank = (local_my_rank + 1 + 1) % 6 + 1;
+    //int in_rank = 2;
 #ifdef use_my_mpi
     char in_filename1[256];
-    sprintf(in_filename1, "%s_%d", argv[optind + 1], local_my_rank + 1);
+    sprintf(in_filename1, "%s_%d", argv[optind + 1], in_rank);
     fprintf(stderr, "the input file1 is %s\n", in_filename1);
 	ko = kopen(in_filename1, &fd);
 #else
@@ -462,8 +491,9 @@ int main_mem(int argc, char *argv[])
 		if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, argv[optind + 1]);
 		return 1;
 	}
-	fp = gzdopen(fd, "r");
-	aux.ks = kseq_init(fp);
+	//fp = gzdopen(fd, "r");
+	//aux.ks = kseq_init(fp);
+	aux.ks = kseq_init(fd);
 	if (optind + 2 < argc) {
 		if (opt->flag&MEM_F_PE) {
 			if (bwa_verbose >= 2)
@@ -471,7 +501,7 @@ int main_mem(int argc, char *argv[])
 		} else {
 #ifdef use_my_mpi
             char in_filename2[256];
-            sprintf(in_filename2, "%s_%d", argv[optind + 2], local_my_rank + 1);
+            sprintf(in_filename2, "%s_%d", argv[optind + 2], in_rank);
             fprintf(stderr, "the input file2 is %s\n", in_filename2);
             ko2 = kopen(in_filename2, &fd2);
 #else
@@ -481,8 +511,9 @@ int main_mem(int argc, char *argv[])
 				if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, argv[optind + 2]);
 				return 1;
 			}
-			fp2 = gzdopen(fd2, "r");
-			aux.ks2 = kseq_init(fp2);
+			//fp2 = gzdopen(fd2, "r");
+			//aux.ks2 = kseq_init(fp2);
+			aux.ks2 = kseq_init(fd2);
 			opt->flag |= MEM_F_PE;
 		}
 	}
@@ -491,8 +522,8 @@ int main_mem(int argc, char *argv[])
     double t0 = GetTime();
 
 
-    //athread_init();
-    athread_init_cgs();
+    athread_init();
+    //athread_init_cgs();
 
 
 #ifdef use_swlu
@@ -505,15 +536,10 @@ int main_mem(int argc, char *argv[])
     lwpf_init(NULL);
 #endif
     
-    //if(aux.idx->bwt->sa_intv != 32) {
-    //    fprintf(stderr, "bwt->sa_intv != 32\n");
-    //    exit(0);
-    //}
-
 
     if(no_mt_io) kt_pipeline_single(1, process, &aux, 3);
     else kt_pipeline_queue(3, process, &aux, 3);
-    //kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
+
 
 #ifdef use_lwpf3
     char filename[50];
@@ -537,9 +563,9 @@ int main_mem(int argc, char *argv[])
     t_tot += GetTime() - t0;
 
 
-    fprintf(stderr, "rank %d [timer] tot : %.2f, step1 : %.2f (%.2f [%.2f]), step2 : %.2f, step3 : %.2f (%.2f)\n", local_my_rank, t_tot, t_step1, t_step1_1, t_step1_1 - t_step1_1_1, t_step2, t_step3, t_step3_1);
-    fprintf(stderr, "rank %d [timer] step2 --- work1 : %.2f (1 : %.2f, 2 : %.2f, 3 : %.2f, 4 : %.2f, 5 : %.2f, 6 : %.2f), work2 : %.2f (1 : %.2f, 2 : %.2f, 3 : %.2f)\n", 
-            local_my_rank, t_work1, t_work1_1, t_work1_2, t_work1_3, t_work1_4, t_work1_5, t_work1_6, t_work2, t_work2_1, t_work2_2, t_work2_3);
+    fprintf(stderr, "rank %d [timer] tot : %.2f, step1 : %.2f (%.2f [%.2f]), step2 : %.2f, step3 : %.2f (%.2f), malloc : %.2f, free : %.2f\n", local_my_rank, t_tot, t_step1, t_step1_1, t_step1_read, t_step2, t_step3, t_step3_1, t_malloc, t_free);
+    fprintf(stderr, "rank %d [timer] step2 --- work1 : %.2f (1 : %.2f, 2 : %.2f, 3 : %.2f, 4 : %.2f, 5 : %.2f, 6 : %.2f), work2 : %.2f (1 : %.2f, 2 : %.2f, 3 : %.2f, 4 : %.2f, 5 : %.2f)\n", 
+            local_my_rank, t_work1, t_work1_1, t_work1_2, t_work1_3, t_work1_4, t_work1_5, t_work1_6, t_work2, t_work2_1, t_work2_2, t_work2_3, t_work2_4, t_work2_5);
     long long s_reg_sum2 = 0;
     //fprintf(stderr, "[info] sum : %lld\n", s_reg_sum);
     //fprintf(stderr, "[info] avg  %lld \  %lld\n", s_px2, c_px2);
@@ -549,12 +575,15 @@ int main_mem(int argc, char *argv[])
 	free(opt);
 	bwa_idx_destroy(aux.idx);
 	kseq_destroy(aux.ks);
-	err_gzclose(fp); kclose(ko);
+	//err_gzclose(fp);
+    kclose(ko);
 	if (aux.ks2) {
 		kseq_destroy(aux.ks2);
-		err_gzclose(fp2); kclose(ko2);
+		//err_gzclose(fp2);
+        kclose(ko2);
 	}
     if(file_out_sam != NULL) fclose(file_out_sam);
+    //if(file_out_fd != -1) close(file_out_fd);
 	return 0;
 }
 

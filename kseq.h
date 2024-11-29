@@ -56,7 +56,12 @@
 	{																\
 		kstream_t *ks = (kstream_t*)calloc(1, sizeof(kstream_t));	\
 		ks->f = f;													\
-		ks->buf = (unsigned char*)malloc(__bufsize);				\
+        ks->buf = (unsigned char*)aligned_alloc(4096, __bufsize);   \
+		if (ks->buf == NULL) {                                      \
+            perror("aligned_alloc failed");                         \
+            free(ks);                                               \
+            exit(EXIT_FAILURE);                                     \
+        }        													\
 		return ks;													\
 	}																\
 	static inline void ks_destroy(kstream_t *ks)					\
@@ -74,6 +79,7 @@
 		if (ks->begin >= ks->end) {							\
 			ks->begin = 0;									\
 			ks->end = __read(ks->f, ks->buf, __bufsize);	\
+            if (ks->end < __bufsize) ks->is_eof = 1;        \
 			if (ks->end == 0) { ks->is_eof = 1; return -1;}	\
 		}													\
 		return (int)ks->buf[ks->begin++];					\
@@ -103,6 +109,7 @@ typedef struct __kstring_t {
 				if (!ks->is_eof) {										\
 					ks->begin = 0;										\
 					ks->end = __read(ks->f, ks->buf, __bufsize);		\
+                    if (ks->end < __bufsize) ks->is_eof = 1;            \
 					if (ks->end == 0) { ks->is_eof = 1; break; }		\
 				} else break;											\
 			}															\
@@ -222,7 +229,7 @@ typedef struct __kstring_t {
 	} kseq_t;
 
 #define KSEQ_INIT2(SCOPE, type_t, __read)		\
-	KSTREAM_INIT(type_t, __read, 16384)			\
+	KSTREAM_INIT(type_t, __read, (4 << 20))			\
 	__KSEQ_TYPE(type_t)							\
 	__KSEQ_BASIC(SCOPE, type_t)					\
 	__KSEQ_READ(SCOPE)

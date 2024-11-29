@@ -48,6 +48,7 @@
 #endif
 
 #include "lwpf3_my_cpe.h"
+#include <slave.h>
 
 const kswr_t g_defr = { 0, -1, -1, -1, -1, -1, -1 };
 

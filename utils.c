@@ -32,6 +32,11 @@
 #include <string.h>
 #include <zlib.h>
 #include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <errno.h>
 #ifdef FSYNC_ON_FLUSH
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -47,7 +52,8 @@ KSORT_INIT(128, pair64_t, pair64_lt)
 KSORT_INIT(64,  uint64_t, ks_lt_generic)
 
 #include "kseq.h"
-KSEQ_INIT2(, gzFile, err_gzread)
+//KSEQ_INIT2(, gzFile, err_gzread)
+KSEQ_INIT2(, int, my_align_read)
 
 /********************
  * System utilities *
@@ -139,6 +145,24 @@ size_t err_fread_noeof(void *ptr, size_t size, size_t nmemb, FILE *stream)
 	return ret;
 }
 
+extern double t_step1_read;
+
+int my_align_read(int file, void *ptr, unsigned int len)
+{
+    double t0 = realtime();
+	int ret = read(file, ptr, len);
+    t_step1_read += realtime() - t0;
+
+	if (ret < 0)
+	{
+		int errnum = 0;
+        const char *msg = strerror(errno);
+		_err_fatal_simple("my_align_read", Z_ERRNO == errnum ? strerror(errno) : msg);
+	}
+
+	return ret;
+}
+
 int err_gzread(gzFile file, void *ptr, unsigned int len)
 {
 	int ret = gzread(file, ptr, len);
@@ -218,6 +242,73 @@ int err_fputs(const char *s, FILE *stream)
 
 	return ret;
 }
+
+
+#define BS_size (4 << 20)
+
+//char align_write_buf[BS_size] __attribute__((aligned(4096)));
+//int buf_used_size = 0;
+
+void my_align_write(char *s, int out_fd, int tag, char *out_file) {
+
+    static int buf_used_size = 0;
+    static int cntt = 0;
+    cntt++;
+    static char* align_write_buf;
+    
+    if(cntt == 1) {
+        align_write_buf = (unsigned char*)aligned_alloc(4096, BS_size);
+    }
+
+    if(tag == 1) {
+        close(out_fd);
+        if (buf_used_size > 0) {
+            int new_fd = open(out_file, O_CREAT | O_WRONLY | O_APPEND, 0666);
+            if (new_fd == -1) {
+                perror("Failed to open file for appending");
+                return;
+            }
+            int ret = write(new_fd, align_write_buf, buf_used_size);
+            if (ret == -1) {
+                perror("Write failed");
+                close(new_fd);
+                return;
+            }
+            buf_used_size = 0;
+            close(new_fd);
+        }
+        return;
+    }
+
+    size_t len = strlen(s);
+
+    while (len > 0) {
+       
+        size_t space_left = BS_size - buf_used_size;
+
+        size_t to_copy = (len < space_left) ? len : space_left;
+
+        memcpy(align_write_buf + buf_used_size, s, to_copy);
+        //printf("len %d, space_left %d, to_copy %d, buf_used_size %d\n", len, space_left, to_copy, buf_used_size);
+
+        buf_used_size += to_copy;
+        s += to_copy;
+        len -= to_copy;
+
+        if (buf_used_size == BS_size) {
+            //printf("output chunk to %d\n", out_fd);
+            write(out_fd, align_write_buf, BS_size);
+            buf_used_size = 0;
+        }
+    }
+}
+
+//void flush_align_write(int out_fd) {
+//    if (buf_used_size > 0) {
+//        write(out_fd, align_write_buf, buf_used_size);
+//        buf_used_size = 0;
+//    }
+//}
 
 int err_puts(const char *s)
 {

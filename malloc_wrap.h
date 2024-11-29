@@ -3,21 +3,17 @@
 
 #include <stdlib.h>  /* Avoid breaking the usual definitions */
 #include <string.h>
+#include "utils.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-        void *wrap_calloc(size_t nmemb, size_t size,
-                                          const char *file, unsigned int line, const char *func);
-        void *wrap_malloc(size_t size,
-                                          const char *file, unsigned int line, const char *func);
-        void *wrap_realloc(void *ptr, size_t size,
-                                           const char *file, unsigned int line, const char *func);
-        char *wrap_strdup(const char *s,
-                                          const char *file, unsigned int line, const char *func);
-    void wrap_free(void *ptr,
-            const char *file, unsigned int line, const char *func);
+        void *wrap_calloc(size_t nmemb, size_t size, const char *file, unsigned int line, const char *func);
+        void *wrap_malloc(size_t size, const char *file, unsigned int line, const char *func);
+        void *wrap_realloc(void *ptr, size_t size, const char *file, unsigned int line, const char *func);
+        char *wrap_strdup(const char *s, const char *file, unsigned int line, const char *func);
+        void wrap_free(void *ptr, const char *file, unsigned int line, const char *func);
 
 
 #ifdef __cplusplus

@@ -88,6 +88,8 @@ extern double t_work1_6;
 extern double t_work2_1;
 extern double t_work2_2;
 extern double t_work2_3;
+extern double t_work2_4;
+extern double t_work2_5;
 
 
 extern long long s_reg_sum;
@@ -96,9 +98,9 @@ extern long long s_px2;
 
 
 
-#define bwt_sa_slave
+#define worker1_slave
 
-//#define bwt_sa_slave2
+#define worker2_slave
 
 
 extern void SLAVE_FUN(get_occ_bench());
@@ -1307,62 +1309,42 @@ static void worker2(void *data, int i, int tid)
 }
 
 
-#define use_cgs_mode
 
+//#define use_cgs_mode
 void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bns, const uint8_t *pac, int64_t n_processed, int n, bseq1_t *seqs, const mem_pestat_t *pes0)
 {
-	//extern void kt_for(int n_threads, void (*func)(void*,int,int), void *data, int n);
-	extern void kt_for_single(int n_threads, void (*func)(void*,int,int), void *data, int n);
+    //extern void kt_for(int n_threads, void (*func)(void*,int,int), void *data, int n);
+    extern void kt_for_single(int n_threads, void (*func)(void*,int,int), void *data, int n);
 
     int my_rank = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
 
-    //athread_init();
-	worker_t w;
-	mem_pestat_t pes[4];
-	double ctime, rtime;
-	ctime = cputime(); rtime = realtime();
-	global_bns = bns;
-	w.regs = malloc(n * sizeof(mem_alnreg_v));
+    worker_t w;
+    mem_pestat_t pes[4];
+    double ctime, rtime;
+    ctime = cputime(); rtime = realtime();
+    global_bns = bns;
+    w.regs = malloc(n * sizeof(mem_alnreg_v));
     w.opt = opt; w.bwt = bwt; w.bns = bns; w.pac = pac;
-	w.seqs = seqs; w.n_processed = n_processed;
-	w.pes = &pes[0];
+    w.seqs = seqs; w.n_processed = n_processed;
+    w.pes = &pes[0];
 #ifdef use_cgs_mode
     const int cpe_num = 384;
 #else
     const int cpe_num = 64;
 #endif
 
-	w.aux = malloc(cpe_num * sizeof(smem_aux_t));
-	for (int i = 0; i < cpe_num; ++i) {
-		//w.aux[i] = smem_aux_init();
-		w.aux[i] = 0;
+    w.aux = malloc(cpe_num * sizeof(smem_aux_t));
+    for (int i = 0; i < cpe_num; ++i) {
+        w.aux[i] = 0;
     }
 
-//#define get_occ_benchmark
-
-#ifdef get_occ_benchmark
-    Para_worker1_s para0;
-    para0.data = (void*)&w;
-
-    double t_start = GetTime();
-# ifdef use_cgs_mode
-    __real_athread_spawn_cgs((void*)slave_get_occ_bench, &para0, 1);
-    athread_join_cgs();
-# else
-    __real_athread_spawn((void*)slave_get_occ_bench, &para0, 1);
-    athread_join();
-# endif
-    fprintf(stderr, "benchmark cost %lf\n", GetTime() - t_start);
-    exit(0);
-     
-#endif
-
+    /*============================ worker1 =================================*/
 
     long nn = (opt->flag&MEM_F_PE)? n>>1 : n;
     double t0 = GetTime();
     double tt0;
-#ifdef bwt_sa_slave
+#ifdef worker1_slave 
     tt0 = GetTime();
     c_px2++;
     s_px2 += nn;
@@ -1387,7 +1369,7 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 # endif
     fprintf(stderr, "slave pre done\n");
     t_work1_2 += GetTime() - tt0;
-      
+
     tt0 = GetTime();
     for(int i = 0; i < n; i++) {
         w.regs[i].m = para.cpe_regs[i].n;
@@ -1421,21 +1403,21 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
     }
 #endif
 
-
-	//for (int i = 0; i < cpe_num; ++i)
-	//	smem_aux_destroy(w.aux[i]);
-
     tt0 = GetTime();
-	free(w.aux);
-	if (opt->flag&MEM_F_PE) { // infer insert sizes if not provided
-		if (pes0) memcpy(pes, pes0, 4 * sizeof(mem_pestat_t));
-		else mem_pestat(opt, bns->l_pac, n, w.regs, pes);
-	}
+    free(w.aux);
+    if (opt->flag&MEM_F_PE) { // infer insert sizes if not provided
+        if (pes0) memcpy(pes, pes0, 4 * sizeof(mem_pestat_t));
+        else mem_pestat(opt, bns->l_pac, n, w.regs, pes);
+    }
     t_work1_6 += GetTime() - tt0;
     t_work1 += GetTime() - t0;
 
+
+
+    /*============================ worker2 =================================*/
+
     t0 = GetTime();
-#ifdef bwt_sa_slave2
+#ifdef worker2_slave 
 
     Para_worker2_s para2;
     para2.nn = nn;
@@ -1452,8 +1434,6 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
     __real_athread_spawn((void*)slave_worker2_s_pre_fast, &para2, 1);
     athread_join();
 # endif
-
-
     t_work2_1 += GetTime() - tt1;
 
     tt1 = GetTime();
@@ -1462,6 +1442,9 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
         memset(w.seqs[i].sam, 'A', (para2.sam_lens[i]) * sizeof(char));
         w.seqs[i].sam[(para2.sam_lens[i])] = '\0';
     }
+    t_work2_2 += GetTime() - tt1;
+
+    tt1 = GetTime();
 # ifdef use_cgs_mode
     __real_athread_spawn_cgs((void*)slave_worker2_s_fast, &para2, 1);
     athread_join_cgs();
@@ -1469,7 +1452,7 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
     __real_athread_spawn((void*)slave_worker2_s_fast, &para2, 1);
     athread_join();
 # endif
-    t_work2_2 += GetTime() - tt1;
+    t_work2_3 += GetTime() - tt1;
 
     tt1 = GetTime();
     for(int i = 0; i < n; i++) {
@@ -1477,18 +1460,20 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
     }
     free(para2.sam_lens);
     free(para2.cpe_sams);
-    t_work2_3 += GetTime() - tt1;
+    t_work2_4 += GetTime() - tt1;
+
 #else
     for(int i = 0; i < nn; i++) {
         worker2(&w, i, i % cpe_num);
     }
-//	kt_for_single(opt->n_threads, worker2, &w, (opt->flag&MEM_F_PE)? n>>1 : n); // generate alignment
 #endif
 
-    //athread_halt();
 
+    tt1 = GetTime();
+    free(w.regs);
+    t_work2_4 += GetTime() - tt1;
+
+    if (bwa_verbose >= 3)
+        fprintf(stderr, "[M::%s] Processed %d reads in %.3f CPU sec, %.3f real sec\n", __func__, n, cputime() - ctime, realtime() - rtime);
     t_work2 += GetTime() - t0;
-	free(w.regs);
-	if (bwa_verbose >= 3)
-		fprintf(stderr, "[M::%s] Processed %d reads in %.3f CPU sec, %.3f real sec\n", __func__, n, cputime() - ctime, realtime() - rtime);
 }

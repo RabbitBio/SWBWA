@@ -73,6 +73,7 @@ static void ktp_worker_single(ktp_t* p) {
         data = p->func(p->shared, step, step ? data : 0);
         step = (step == p->n_steps - 1 || data) ? (step + 1) % p->n_steps : p->n_steps;
     }
+    p->func(p->shared, 3, 0);
 }
 
 extern "C" void kt_pipeline_single(int n_threads, void* (*func)(void*, int, void*), void* shared_data, int n_steps) {
@@ -144,7 +145,7 @@ extern "C" void kt_pipeline_single(int n_threads, void* (*func)(void*, int, void
 
 using DataType = void*;
 
-const int queue_item_limit = 1;
+const int queue_item_limit = 4;
 
 
 
@@ -252,6 +253,7 @@ void writer_thread(ktp_t* p, MyQueue& queue, std::atomic<bool>& done_processing)
             p->func(p->shared, 2, item);
         }
     }
+    p->func(p->shared, 3, item);
 }
 
 extern "C" void kt_pipeline_queue(int n_threads, void* (*func)(void*, int, void*), void* shared_data, int n_steps) {

@@ -319,7 +319,8 @@ void *kopen(const char *fn, int *_fd)
 #ifdef _WIN32
 			*_fd = open(fn, O_RDONLY | O_BINARY);
 #else
-			*_fd = open(fn, O_RDONLY);
+			//*_fd = open(fn, O_RDONLY);
+			*_fd = open(fn, O_RDWR | O_DIRECT);
 #endif
 			if (*_fd >= 0) {
 				aux = calloc(1, sizeof(koaux_t));

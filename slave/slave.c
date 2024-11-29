@@ -24,7 +24,7 @@ void get_occ_bench(Para_worker1_s *para) {
     occ_bench(para->data);
 }
 
-#define use_cgs_mode
+//#define use_cgs_mode
 
 #ifdef use_cgs_mode
 #define cpe_num_slave 384

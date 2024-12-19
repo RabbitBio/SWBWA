@@ -1,0 +1,1 @@
+rm -rf test.sam && bsub -I -b -q q_sw_expr -n 1 -cgsp 64 -J test_icm -share_size 1000 -o output.log -mpecg 6 -cross_size 42000 -xmalloc -cache_size 128 -priv_size 16 ./bwa mem -t 1 -1 -o test.sam ../bwa_index/GRCh38.d1.vd1.fa ../../data/b1.fq ../../data/b2.fq

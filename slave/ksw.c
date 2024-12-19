@@ -71,7 +71,7 @@ struct _kswq_t {
  */
 
 
-__thread_local_fix char kswq_fix[32 << 10];
+//__thread_local_fix char kswq_fix[32 << 10];
 
 
 kswq_t *ksw_qinit(int size, int qlen, const uint8_t *query, int m, const int8_t *mat)
@@ -88,9 +88,9 @@ kswq_t *ksw_qinit(int size, int qlen, const uint8_t *query, int m, const int8_t 
 	slen = (qlen + p - 1) / p; // segmented length
 
     lwpf_start(l_init_malloc);
-	//q = (kswq_t*)malloc(sizeof(kswq_t) + 256 + 64 * 4 * slen * (m + 4)); // a single block of memory
+	q = (kswq_t*)malloc(sizeof(kswq_t) + 256 + 64 * 4 * slen * (m + 4)); // a single block of memory
     //memset(q, 0, sizeof(kswq_t) + 256 + 64 * 4 * slen * (m + 4));
-    q = (kswq_t*)kswq_fix;
+    //q = (kswq_t*)kswq_fix;
 	//q = (kswq_t*)ldm_malloc(32 << 10); // a single block of memory
     lwpf_stop(l_init_malloc);
 	q->qp = (__m128i*)(((size_t)q + sizeof(kswq_t) + 63) >> 6 << 6); // align memory
@@ -438,7 +438,7 @@ kswr_t ksw_align2(int qlen, uint8_t *query, int tlen, uint8_t *target, int m, co
 	func = q->size == 2? ksw_i16 : ksw_u8;
 	size = q->size;
 	r = func(q, tlen, target, o_del, e_del, o_ins, e_ins, xtra);
-	//if (qry == 0) free(q);
+	if (qry == 0) free(q);
 	//if (qry == 0) ldm_free(q, 32 << 10);
 #ifdef use_lwpf3
     lwpf_stop(l_ksw_2);
@@ -465,7 +465,7 @@ kswr_t ksw_align2(int qlen, uint8_t *query, int tlen, uint8_t *target, int m, co
 #endif
 	rr = func(q, tlen, target, o_del, e_del, o_ins, e_ins, KSW_XSTOP | r.score);
 	revseq(r.qe + 1, query); revseq(r.te + 1, target);
-	//free(q);
+	free(q);
 	//ldm_free(q, 32 << 10);
 	if (r.score == rr.score)
 		r.tb = r.te - rr.te, r.qb = r.qe - rr.qe;

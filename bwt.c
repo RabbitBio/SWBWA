@@ -452,6 +452,9 @@ void bwt_restore_sa(const char *fn, bwt_t *bwt)
 
 	bwt->n_sa = (bwt->seq_len + bwt->sa_intv) / bwt->sa_intv;
 	bwt->sa = (bwtint_t*)calloc(bwt->n_sa, sizeof(bwtint_t));
+    //bwt->sa = (bwtint_t*)_sw_xmalloc(bwt->n_sa * sizeof(bwtint_t));
+    //memset(bwt->sa, 0, bwt->n_sa * sizeof(bwtint_t));
+    //fprintf(stderr, "sw malloc bwt->sa %lld, %p\n", bwt->n_sa * sizeof(bwtint_t), bwt->sa);
 	bwt->sa[0] = -1;
 
 	fread_fix(fp, sizeof(bwtint_t) * (bwt->n_sa - 1), bwt->sa + 1);
@@ -468,6 +471,9 @@ bwt_t *bwt_restore_bwt(const char *fn)
 	err_fseek(fp, 0, SEEK_END);
 	bwt->bwt_size = (err_ftell(fp) - sizeof(bwtint_t) * 5) >> 2;
 	bwt->bwt = (uint32_t*)calloc(bwt->bwt_size, 4);
+    //bwt->bwt = (uint32_t*)_sw_xmalloc(bwt->bwt_size * 4);
+    //memset(bwt->bwt, 0, bwt->bwt_size * 4);
+    //fprintf(stderr, "sw malloc bwt->bwt %lld, %p\n", bwt->bwt_size * 4, bwt->bwt);
 	err_fseek(fp, 0, SEEK_SET);
 	err_fread_noeof(&bwt->primary, sizeof(bwtint_t), 1, fp);
 	err_fread_noeof(bwt->L2+1, sizeof(bwtint_t), 4, fp);

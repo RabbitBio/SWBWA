@@ -310,6 +310,9 @@ bwaidx_t *bwa_idx_load_from_disk(const char *hint, int which)
 			fprintf(stderr, "[M::%s] read %d ALT contigs\n", __func__, c);
 		if (which & BWA_IDX_PAC) {
 			idx->pac = calloc(idx->bns->l_pac/4+1, 1);
+            //idx->pac = _sw_xmalloc(idx->bns->l_pac/4+1 * 1);
+            //memset(idx->pac, 0, idx->bns->l_pac/4+1 * 1);
+            //fprintf(stderr, "sw malloc %lld, %p\n", idx->bns->l_pac/4+1 * 1, idx->pac);
 			err_fread_noeof(idx->pac, 1, idx->bns->l_pac/4+1, idx->bns->fp_pac); // concatenated 2-bit encoded sequence
 			err_fclose(idx->bns->fp_pac);
 			idx->bns->fp_pac = 0;

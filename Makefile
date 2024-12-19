@@ -1,7 +1,8 @@
 CC=		 	mpicc
 CXX= 	    mpicxx
 #CC=			clang --analyze
-CFLAGS= -w -g -Wall -Wno-unused-function -O2 -D_GNU_SOURCE  -I/home/swtest/lwpf3
+CFLAGS= -w -g -Wall -Wno-unused-function -O2 -D_GNU_SOURCE -I/home/export/online1/mdt00/shisuan/sweq/ylf/someGit/lwpf3 -L/usr/sw/penv/lib
+
 #-fprofile-swperf
 #CFLAGS=		-g -Wall -Wno-unused-function
 #WRAP_MALLOC=-DUSE_MALLOC_WRAPPERS
@@ -16,8 +17,7 @@ AOBJS=		bwashm.o bwase.o bwaseqio.o bwtgap.o bwtaln.o bamlite.o \
 			bwtsw2_chain.o fastmap.o bwtsw2_pair.o
 PROG=		bwa
 INCLUDES=	
-#LIBS= /home/swtest/ylfMalloc/lib/libylfMallocFree.a -static -lm -lz -lpthread -lm_slave -Wl,--wrap=malloc -Wl,--wrap=free -Wl,--wrap=calloc -Wl,--wrap=realloc -Wl,--wrap=valloc -Wl,--wrap=posix_memalign
-LIBS= -static -lm -lz -lpthread -lm_slave 
+LIBS= -Wl,-q -lm -lz -lpthread -lm_slave -lswperf
 #-lswperf
 SUBDIRS=	.
 

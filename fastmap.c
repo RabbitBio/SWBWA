@@ -522,8 +522,8 @@ int main_mem(int argc, char *argv[])
     double t0 = GetTime();
 
 
-    athread_init();
-    //athread_init_cgs();
+    //athread_init();
+    athread_init_cgs();
 
 
 #ifdef use_swlu
@@ -543,7 +543,11 @@ int main_mem(int argc, char *argv[])
 
 #ifdef use_lwpf3
     char filename[50];
-    sprintf(filename, "lwpf_%d.log", local_my_rank);
+#ifdef use_cgs_mode
+    sprintf(filename, "lwpf_%d_6CG.log", local_my_rank);
+#else
+    sprintf(filename, "lwpf_%d_1CG.log", local_my_rank);
+#endif
     FILE *file = fopen(filename, "w");
     if (file == NULL) {
         perror("Failed to open lwpf.log");
@@ -558,7 +562,7 @@ int main_mem(int argc, char *argv[])
     swlu_prof_print();
 #endif	
 
-    athread_halt();
+    //athread_halt();
 
     t_tot += GetTime() - t0;
 
@@ -566,9 +570,6 @@ int main_mem(int argc, char *argv[])
     fprintf(stderr, "rank %d [timer] tot : %.2f, step1 : %.2f (%.2f [%.2f]), step2 : %.2f, step3 : %.2f (%.2f), malloc : %.2f, free : %.2f\n", local_my_rank, t_tot, t_step1, t_step1_1, t_step1_read, t_step2, t_step3, t_step3_1, t_malloc, t_free);
     fprintf(stderr, "rank %d [timer] step2 --- work1 : %.2f (1 : %.2f, 2 : %.2f, 3 : %.2f, 4 : %.2f, 5 : %.2f, 6 : %.2f), work2 : %.2f (1 : %.2f, 2 : %.2f, 3 : %.2f, 4 : %.2f, 5 : %.2f)\n", 
             local_my_rank, t_work1, t_work1_1, t_work1_2, t_work1_3, t_work1_4, t_work1_5, t_work1_6, t_work2, t_work2_1, t_work2_2, t_work2_3, t_work2_4, t_work2_5);
-    long long s_reg_sum2 = 0;
-    //fprintf(stderr, "[info] sum : %lld\n", s_reg_sum);
-    //fprintf(stderr, "[info] avg  %lld \  %lld\n", s_px2, c_px2);
 
 
 	free(hdr_line);

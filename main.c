@@ -94,8 +94,6 @@ int main(int argc, char *argv[])
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    //htmalloccount_init();
-
     //volatile int aa = 0;
     //fprintf(stderr, "aa %d\n", aa);
     //while(aa == 0) {
@@ -147,8 +145,7 @@ int main(int argc, char *argv[])
 	free(bwa_pg);
 
     //athread_halt();
-    
-    //htmalloccount_print();
+
     MPI_Finalize();
 	return ret;
 }

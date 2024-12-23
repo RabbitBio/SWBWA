@@ -436,6 +436,9 @@ static bwtint_t fread_fix(FILE *fp, bwtint_t size, void *a)
 	return offset;
 }
 
+
+#define use_cross_seg
+
 void bwt_restore_sa(const char *fn, bwt_t *bwt)
 {
 	char skipped[256];
@@ -451,13 +454,15 @@ void bwt_restore_sa(const char *fn, bwt_t *bwt)
 	xassert(primary == bwt->seq_len, "SA-BWT inconsistency: seq_len is not the same.");
 
 	bwt->n_sa = (bwt->seq_len + bwt->sa_intv) / bwt->sa_intv;
-	bwt->sa = (bwtint_t*)calloc(bwt->n_sa, sizeof(bwtint_t));
-    //bwt->sa = (bwtint_t*)_sw_xmalloc(bwt->n_sa * sizeof(bwtint_t));
-    //memset(bwt->sa, 0, bwt->n_sa * sizeof(bwtint_t));
-    //fprintf(stderr, "sw malloc bwt->sa %lld, %p\n", bwt->n_sa * sizeof(bwtint_t), bwt->sa);
-	bwt->sa[0] = -1;
-
-	fread_fix(fp, sizeof(bwtint_t) * (bwt->n_sa - 1), bwt->sa + 1);
+#ifdef use_cross_seg
+    bwt->sa = (bwtint_t*)_sw_xmalloc(bwt->n_sa * sizeof(bwtint_t));
+    memset(bwt->sa, 0, bwt->n_sa * sizeof(bwtint_t));
+#else
+    bwt->sa = (bwtint_t*)calloc(bwt->n_sa, sizeof(bwtint_t));
+#endif
+    fprintf(stderr, "sw malloc bwt->sa %lld, %p\n", bwt->n_sa * sizeof(bwtint_t), bwt->sa);
+    bwt->sa[0] = -1;
+    fread_fix(fp, sizeof(bwtint_t) * (bwt->n_sa - 1), bwt->sa + 1);
 	err_fclose(fp);
 }
 
@@ -470,15 +475,18 @@ bwt_t *bwt_restore_bwt(const char *fn)
 	fp = xopen(fn, "rb");
 	err_fseek(fp, 0, SEEK_END);
 	bwt->bwt_size = (err_ftell(fp) - sizeof(bwtint_t) * 5) >> 2;
+#ifdef use_cross_seg
+    bwt->bwt = (uint32_t*)_sw_xmalloc(bwt->bwt_size * 4);
+    memset(bwt->bwt, 0, bwt->bwt_size * 4);
+#else
 	bwt->bwt = (uint32_t*)calloc(bwt->bwt_size, 4);
-    //bwt->bwt = (uint32_t*)_sw_xmalloc(bwt->bwt_size * 4);
-    //memset(bwt->bwt, 0, bwt->bwt_size * 4);
-    //fprintf(stderr, "sw malloc bwt->bwt %lld, %p\n", bwt->bwt_size * 4, bwt->bwt);
+#endif
+    fprintf(stderr, "sw malloc bwt->bwt %lld, %p\n", bwt->bwt_size * 4, bwt->bwt);
 	err_fseek(fp, 0, SEEK_SET);
 	err_fread_noeof(&bwt->primary, sizeof(bwtint_t), 1, fp);
 	err_fread_noeof(bwt->L2+1, sizeof(bwtint_t), 4, fp);
-	fread_fix(fp, bwt->bwt_size<<2, bwt->bwt);
-	bwt->seq_len = bwt->L2[4];
+    fread_fix(fp, bwt->bwt_size<<2, bwt->bwt);
+    bwt->seq_len = bwt->L2[4];
 	err_fclose(fp);
 	bwt_gen_cnt_table(bwt);
 
@@ -488,6 +496,6 @@ bwt_t *bwt_restore_bwt(const char *fn)
 void bwt_destroy(bwt_t *bwt)
 {
 	if (bwt == 0) return;
-	free(bwt->sa); free(bwt->bwt);
+    free(bwt->sa); free(bwt->bwt);
 	free(bwt);
 }

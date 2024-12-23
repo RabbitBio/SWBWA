@@ -1271,6 +1271,11 @@ static void worker2(void *data, int i, int tid)
 }
 
 
+extern void SLAVE_FUN(worker12_s_pre_fast_cross());
+extern void SLAVE_FUN(worker12_s_fast_cross());
+
+extern void SLAVE_FUN(worker12_s_pre_fast());
+extern void SLAVE_FUN(worker12_s_fast());
 
 extern void SLAVE_FUN(worker1_s_pre_fast_cross());
 extern void SLAVE_FUN(worker1_s_fast_cross());
@@ -1294,6 +1299,8 @@ typedef struct{
     mem_alnreg_v* cpe_regs;
     char** cpe_sams;
     int *sam_lens;
+    const mem_pestat_t *pes0;
+	int *s_ids;
 
     // for cross_copy
     int *tag;
@@ -1322,9 +1329,9 @@ typedef struct{
 
 /***********************************************************/
 unsigned long segment1 = 0x00004ffff0410000;
-unsigned long segment1_len = 0x00000000002ab3d8;
+unsigned long segment1_len = 0x000000000039b530;
 unsigned long segment2 = 0x0000500000004040;
-unsigned long segment2_len = 0x00000000001dd788;
+unsigned long segment2_len = 0x0000000000085c48;
 /***********************************************************/
 
 __uncached int cpe_is_over[cpe_num];
@@ -1333,8 +1340,8 @@ void* malloc_csr() {
     asm volatile("memb\n\t":::);
     unsigned long len = csr_copy_size * cpe_num;
     unsigned long len_ = len + (1ul << 20);
-    void *dest_ = (void*)malloc(len_);
-    //void *dest_ = (void*)_sw_xmalloc(len_);
+    //void *dest_ = (void*)malloc(len_);
+    void *dest_ = (void*)_sw_xmalloc(len_);
     void *dest = (void*)(((unsigned long)dest_ + 4095) & (~4095ul));
     printf("csr dest %p\n", dest);
     //if(mprotect(dest, (len + 4095) & (~4095ul), PROT_READ | PROT_WRITE | PROT_EXEC) == -1) {
@@ -1349,8 +1356,8 @@ void* malloc_segments() {
     asm volatile("memb\n\t":::);
     unsigned long len = segment2 + segment2_len - segment1;
     unsigned long len_ = len + (1ul << 20);
-    void *dest_ = (void*)malloc(len_);
-    //void *dest_ = (void*)_sw_xmalloc(len_);
+    //void *dest_ = (void*)malloc(len_);
+    void *dest_ = (void*)_sw_xmalloc(len_);
     void *dest = (void*)(((unsigned long)dest_ + 4095) & (~4095ul));
     printf("segments dest %p\n", dest);
     //if(mprotect(dest, (len + 4095) & (~4095ul), PROT_READ | PROT_WRITE | PROT_EXEC) == -1) {
@@ -1452,6 +1459,213 @@ void my_spawn_join(long fun_addr) {
     }
 }
 
+//int shuffle_ids[4 << 20];
+
+void shuffle(int *array, int n) {
+	srand((unsigned int)time(NULL));
+    for (int i = n - 1; i > 0; i--) {
+        int j = rand() % (i + 1);
+        int temp = array[i];
+        array[i] = array[j];
+        array[j] = temp;
+    }
+}
+
+void mem_process_seqs_merge(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bns, const uint8_t *pac, int64_t n_processed, int n, bseq1_t *seqs, const mem_pestat_t *pes0)
+{
+    //extern void kt_for(int n_threads, void (*func)(void*,int,int), void *data, int n);
+    extern void kt_for_single(int n_threads, void (*func)(void*,int,int), void *data, int n);
+
+    int my_rank = 0;
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+
+    assert(n < (4 << 20));
+    worker_t w;
+    double ctime, rtime;
+    ctime = cputime(); rtime = realtime();
+    w.regs = malloc(n * sizeof(mem_alnreg_v));
+    w.opt = opt; w.bwt = bwt; w.bns = bns; w.pac = pac;
+    w.seqs = seqs; w.n_processed = n_processed;
+    w.aux = malloc(cpe_num * sizeof(smem_aux_t));
+    for (int i = 0; i < cpe_num; ++i) {
+        w.aux[i] = 0;
+    }
+
+    long nn = (opt->flag&MEM_F_PE)? n>>1 : n;
+    double t0 = GetTime();
+    double tt0;
+
+
+    tt0 = GetTime();
+
+    // copy .text* and data to cross segment
+    static void *new_segments;
+    static long new_slave_fun1;
+    static long new_slave_fun2;
+    static int cntt = 0;
+    static unsigned long host_gp;
+    static Para_worker12_s *para;
+    static int* shuffle_ids = -1;
+    static int pre_nn;
+
+    cntt++;
+    if(cntt == 1) {
+        para = (Para_worker12_s*)malloc(sizeof(Para_worker12_s));
+        shuffle_ids = malloc((4 << 20) * sizeof(int));
+    }
+
+    para->nn = nn;
+    para->data = (void*)&w;
+    para->cpe_sams = (char**)malloc(n * sizeof(char*));
+    para->sam_lens = (int*)malloc(n * sizeof(int));
+    para->pes0 = pes0;
+    for(int i = 0; i < n; i++) para->sam_lens[i] = 0;
+
+
+#ifdef use_cgs_mode
+    if(cntt == 1) {
+        double cross_time_begin = GetTime();
+        add_exec();
+
+        void *priv_addr = malloc_csr();
+        new_segments = malloc_segments();
+        printf("new_text is %p\n", new_segments);
+
+        new_slave_fun1 = ((long)slave_worker12_s_pre_fast_cross - (long)segment1) + (long)new_segments;
+        new_slave_fun2 = ((long)slave_worker12_s_fast_cross - (long)segment1) + (long)new_segments;
+        //new_slave_fun1 = (long)slave_worker12_s_pre_fast_cross;
+        //new_slave_fun2 = (long)slave_worker12_s_fast_cross;
+
+
+        printf("offset is %lu\n", (long)new_segments - segment1);
+        printf("fun1 is %p\n", (void*)new_slave_fun1);
+        printf("fun2 is %p\n", (void*)new_slave_fun2);
+
+        asm volatile("mov $29, %0\n\t":"=r"(host_gp)::);
+
+        para->tag = cpe_is_over;
+        para->new_gp = (void*)((unsigned long)new_segments + host_gp - segment1);
+        //para->new_gp = (void*)host_gp;
+        para->offset_seg = (unsigned long)new_segments - segment1;
+        para->priv_addr = priv_addr;
+
+
+        printf("gp = old %p, new %p, tag = %p, data %p\n", (void*)host_gp, (void*)para->new_gp, cpe_is_over, para->data);
+
+        FILE *f = fopen("data.bin", "r");
+        if (f == NULL) {
+            perror("Error opening file");
+            exit(EXIT_FAILURE);
+        }
+
+        unsigned long change_size;
+        fread(&change_size, sizeof(unsigned long), 1, f);
+        short *got_content = (short*)malloc(change_size * sizeof(short));
+        printf("got change size = %lu\n", change_size);
+        int pos = 0;
+        for(unsigned long i = 0; i < change_size; ++i) {
+            short disp;
+            fread(&disp, sizeof(short), 1, f);
+            got_content[pos++] = disp;
+        }
+        fclose(f);
+
+        f = fopen("data.bin2", "r");
+        if (f == NULL) {
+            perror("Error opening file");
+            exit(EXIT_FAILURE);
+        }
+        unsigned long tls_size;
+        fread(&tls_size, sizeof(unsigned long), 1, f);
+        unsigned long *tls_content = (unsigned long*)malloc(tls_size * sizeof(unsigned long));
+        printf("got tls size = %lu\n", tls_size);
+        pos = 0;
+        for(unsigned long i = 0; i < tls_size; ++i) {
+            unsigned long disp;
+            fread(&disp, sizeof(unsigned long), 1, f);
+            tls_content[pos++] = disp;
+            printf("tls contend %lx %lx\n", disp, *((unsigned long*)disp));
+        }
+        fclose(f);
+
+        para->tls_content = tls_content;
+        para->tls_size = tls_size;
+
+
+        __real_athread_spawn_cgs((void*)slave_pass_para, para, 1);
+        athread_join_cgs();
+        printf("pass para done\n");
+
+        copy_segments((void*)new_segments);
+        change_got(host_gp, segment1, (unsigned long)new_segments, got_content, change_size);
+
+        athread_spawn_cgs(copy_priv_segment, para);
+        athread_join_cgs();
+        athread_spawn_cgs(change_priv_segment, para);
+        athread_join_cgs();
+        printf("cross time cost %.4f\n", GetTime() - cross_time_begin);
+
+    }
+#endif
+	if(para->nn != pre_nn) {
+		for(int i = 0; i < para->nn; i++) {
+			shuffle_ids[i] = i;
+		}
+		shuffle(shuffle_ids, para->nn);
+        pre_nn = para->nn;
+	}
+	para->s_ids = shuffle_ids;
+    t_work1_1 += GetTime() - tt0;
+
+
+    tt0 = GetTime();
+#ifdef use_cgs_mode
+    my_spawn_join(new_slave_fun1);
+    //__real_athread_spawn_cgs((void*)slave_worker12_s_pre_fast, para, 1);
+    //athread_join_cgs();
+#else
+    __real_athread_spawn((void*)slave_worker12_s_pre_fast, para, 1);
+    athread_join();
+#endif
+    fprintf(stderr, "slave pre done\n");
+    t_work1_2 += GetTime() - tt0;
+
+
+    tt0 = GetTime();
+    for(int i = 0; i < n; i++) {
+        w.seqs[i].sam = malloc((para->sam_lens[i]) * sizeof(char) + 1);
+        memset(w.seqs[i].sam, 'A', (para->sam_lens[i]) * sizeof(char));
+        w.seqs[i].sam[(para->sam_lens[i])] = '\0';
+    }
+    t_work1_3 += GetTime() - tt0;
+
+
+    tt0 = GetTime();
+#ifdef use_cgs_mode
+    my_spawn_join(new_slave_fun2);
+    //__real_athread_spawn_cgs((void*)slave_worker12_s_fast, para, 1);
+    //athread_join_cgs();
+#else
+    __real_athread_spawn((void*)slave_worker12_s_fast, para, 1);
+    athread_join();
+#endif
+    t_work1_4 += GetTime() - tt0;
+
+
+    tt0 = GetTime();
+    free(para->sam_lens);
+    free(para->cpe_sams);
+    free(w.regs);
+    free(w.aux);
+    t_work1_5 += GetTime() - tt0;
+
+
+    t_work1 += GetTime() - t0;
+
+    if (bwa_verbose >= 3)
+        fprintf(stderr, "[M::%s] Processed %d reads in %.3f CPU sec, %.3f real sec\n", __func__, n, cputime() - ctime, realtime() - rtime);
+}
+
 
 void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bns, const uint8_t *pac, int64_t n_processed, int n, bseq1_t *seqs, const mem_pestat_t *pes0)
 {
@@ -1543,6 +1757,11 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
         printf("gp = old %p, new %p, tag = %p, data %p\n", (void*)host_gp, (void*)para->new_gp, cpe_is_over, para->data);
 
         FILE *f = fopen("data.bin", "r");
+        if (f == NULL) {
+            perror("Error opening file");
+            exit(EXIT_FAILURE);
+        }
+
         unsigned long change_size;
         fread(&change_size, sizeof(unsigned long), 1, f);
         short *got_content = (short*)malloc(change_size * sizeof(short));
@@ -1556,6 +1775,10 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
         fclose(f);
 
         f = fopen("data.bin2", "r");
+        if (f == NULL) {
+            perror("Error opening file");
+            exit(EXIT_FAILURE);
+        }
         unsigned long tls_size;
         fread(&tls_size, sizeof(unsigned long), 1, f);
         unsigned long *tls_content = (unsigned long*)malloc(tls_size * sizeof(unsigned long));
@@ -1588,7 +1811,7 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 
     }
 #endif
-    t_work1_1 += GetTime() - tt0;
+
 
 
     tt0 = GetTime();

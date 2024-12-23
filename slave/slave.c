@@ -13,6 +13,8 @@ typedef struct{
     mem_alnreg_v* cpe_regs;
     char** cpe_sams;
     int *sam_lens;
+    const mem_pestat_t *pes0;
+    int *s_ids;
 
     // for cross_copy
     int *tag;
@@ -353,6 +355,74 @@ void worker2_s_fast_cross() {
 
 }
 
+
+
+void worker12_s_pre_fast_cross() {
+    asm volatile("mov %0, $29\n\t"::"r"(pp_slave->new_gp):);
+
+    unsigned long init_csr_value = 0;
+    asm volatile("rcsr %0, 0xc4" : "=r"(init_csr_value));
+    if(init_csr_value < 0x500000000000) {
+        unsigned long new_csr_value = pp_slave->priv_addr + csr_copy_size * _MYID + init_csr_value - private_start;
+        if(_MYID == 0) {
+            printf("init_csr_value %p\n", (void*)init_csr_value);
+            //for(int i = 0; i < 16; i++) {
+            //    printf("%lx %lx\n", *(unsigned long*)(init_csr_value + i * 8), *(unsigned long*)(new_csr_value + i * 8));
+            //}
+        }
+        asm volatile("wcsr %0, 0xc4\n\t"::"r"(new_csr_value):);
+    }
+
+    Para_worker12_s *para = pp_slave;
+    lwpf_enter(TEST);
+    lwpf_start(l_worker12_1);
+    int pre_n = ceil(1.0 * para->nn / cpe_num_slave);
+    int l_pos = global_pen * pre_n;
+    int r_pos = l_pos + pre_n;
+    if(r_pos > para->nn) r_pos = para->nn;
+    worker12_pre_fast(para->data, l_pos, r_pos, global_pen, para->sam_lens, para->cpe_sams, para->pes0, para->s_ids);
+    lwpf_stop(l_worker12_1);
+    lwpf_exit(TEST);
+
+    pp_slave->tag[global_pen] = 1;
+    flush_slave_cache();
+    while(1);
+}
+
+
+void worker12_s_fast_cross() {
+    asm volatile("mov %0, $29\n\t"::"r"(pp_slave->new_gp):);
+
+    unsigned long init_csr_value = 0;
+    asm volatile("rcsr %0, 0xc4" : "=r"(init_csr_value));
+    if(init_csr_value < 0x500000000000) {
+        unsigned long new_csr_value = pp_slave->priv_addr + csr_copy_size * _MYID + init_csr_value - private_start;
+        if(_MYID == 0) {
+            printf("init_csr_value %p\n", (void*)init_csr_value);
+            //for(int i = 0; i < 16; i++) {
+            //    printf("%lx %lx\n", *(unsigned long*)(init_csr_value + i * 8), *(unsigned long*)(new_csr_value + i * 8));
+            //}
+        }
+        asm volatile("wcsr %0, 0xc4\n\t"::"r"(new_csr_value):);
+    }
+
+    Para_worker12_s *para = pp_slave;
+    lwpf_enter(TEST);
+    lwpf_start(l_worker12_2);
+    int pre_n = ceil(1.0 * para->nn / cpe_num_slave);
+    int l_pos = global_pen * pre_n;
+    int r_pos = l_pos + pre_n;
+    if(r_pos > para->nn) r_pos = para->nn;
+    worker12_fast(para->data, l_pos, r_pos, global_pen, para->sam_lens, para->cpe_sams, para->s_ids);
+    lwpf_stop(l_worker12_2);
+    lwpf_exit(TEST);
+
+    pp_slave->tag[global_pen] = 1;
+    flush_slave_cache();
+    while(1);
+}
+
+
 void worker1_s_pre_fast(Para_worker12_s *para) {
  
     lwpf_enter(TEST);
@@ -399,4 +469,31 @@ void worker2_s_fast(Para_worker12_s *para) {
     lwpf_stop(l_worker2_2);
     lwpf_exit(TEST);
 
+}
+
+
+
+void worker12_s_pre_fast(Para_worker12_s *para) {
+    lwpf_enter(TEST);
+    lwpf_start(l_worker12_1);
+    int pre_n = ceil(1.0 * para->nn / cpe_num_slave);
+    int l_pos = global_pen * pre_n;
+    int r_pos = l_pos + pre_n;
+    if(r_pos > para->nn) r_pos = para->nn;
+    worker12_pre_fast(para->data, l_pos, r_pos, global_pen, para->sam_lens, para->cpe_sams, para->pes0, para->s_ids);
+    lwpf_stop(l_worker12_1);
+    lwpf_exit(TEST);
+}
+
+
+void worker12_s_fast(Para_worker12_s *para) {
+    lwpf_enter(TEST);
+    lwpf_start(l_worker12_2);
+    int pre_n = ceil(1.0 * para->nn / cpe_num_slave);
+    int l_pos = global_pen * pre_n;
+    int r_pos = l_pos + pre_n;
+    if(r_pos > para->nn) r_pos = para->nn;
+    worker12_fast(para->data, l_pos, r_pos, global_pen, para->sam_lens, para->cpe_sams, para->s_ids);
+    lwpf_stop(l_worker12_2);
+    lwpf_exit(TEST);
 }

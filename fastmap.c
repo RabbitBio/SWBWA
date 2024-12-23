@@ -170,7 +170,8 @@ static void *process(void *shared, int step, void *_data)
 			}
 			free(sep[0]); free(sep[1]);
 		} else {
-            mem_process_seqs(opt, idx->bwt, idx->bns, idx->pac, aux->n_processed, data->n_seqs, data->seqs, aux->pes0);
+            //mem_process_seqs(opt, idx->bwt, idx->bns, idx->pac, aux->n_processed, data->n_seqs, data->seqs, aux->pes0);
+            mem_process_seqs_merge(opt, idx->bwt, idx->bns, idx->pac, aux->n_processed, data->n_seqs, data->seqs, aux->pes0);
         }
 		aux->n_processed += data->n_seqs;
         t_step2 += GetTime() - t0;
@@ -474,7 +475,6 @@ int main_mem(int argc, char *argv[])
 		for (i = 0; i < aux.idx->bns->n_seqs; ++i)
 			aux.idx->bns->anns[i].is_alt = 0;
 
-
     int in_rank = local_my_rank + 1;
     //int in_rank = (local_my_rank + 1 + 1) % 6 + 1;
     //int in_rank = 2;
@@ -554,8 +554,8 @@ int main_mem(int argc, char *argv[])
         return 1;
     }
     lwpf_report_summary(file);
-    //lwpf_report_detail(stdout);
-     fclose(file);
+    lwpf_report_detail(file);
+    fclose(file);
 #endif
 
 #ifdef use_swlu

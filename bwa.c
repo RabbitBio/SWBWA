@@ -290,6 +290,8 @@ bwt_t *bwa_idx_load_bwt(const char *hint)
 	return bwt;
 }
 
+#define use_cross_seg
+
 bwaidx_t *bwa_idx_load_from_disk(const char *hint, int which)
 {
 	bwaidx_t *idx;
@@ -309,11 +311,14 @@ bwaidx_t *bwa_idx_load_from_disk(const char *hint, int which)
 		if (bwa_verbose >= 3)
 			fprintf(stderr, "[M::%s] read %d ALT contigs\n", __func__, c);
 		if (which & BWA_IDX_PAC) {
+#ifdef use_cross_seg
+            idx->pac = _sw_xmalloc(idx->bns->l_pac/4+1 * 1);
+            memset(idx->pac, 0, idx->bns->l_pac/4+1 * 1);
+#else
 			idx->pac = calloc(idx->bns->l_pac/4+1, 1);
-            //idx->pac = _sw_xmalloc(idx->bns->l_pac/4+1 * 1);
-            //memset(idx->pac, 0, idx->bns->l_pac/4+1 * 1);
-            //fprintf(stderr, "sw malloc %lld, %p\n", idx->bns->l_pac/4+1 * 1, idx->pac);
-			err_fread_noeof(idx->pac, 1, idx->bns->l_pac/4+1, idx->bns->fp_pac); // concatenated 2-bit encoded sequence
+#endif
+            fprintf(stderr, "sw malloc %lld, %p\n", idx->bns->l_pac/4+1 * 1, idx->pac);
+            err_fread_noeof(idx->pac, 1, idx->bns->l_pac/4+1, idx->bns->fp_pac); // concatenated 2-bit encoded sequence
 			err_fclose(idx->bns->fp_pac);
 			idx->bns->fp_pac = 0;
 		}
@@ -332,8 +337,8 @@ void bwa_idx_destroy(bwaidx_t *idx)
 	if (idx == 0) return;
 	if (idx->mem == 0) {
 		if (idx->bwt) bwt_destroy(idx->bwt);
-		if (idx->bns) bns_destroy(idx->bns);
-		if (idx->pac) free(idx->pac);
+        if (idx->bns) bns_destroy(idx->bns);
+        if (idx->pac) free(idx->pac);
 	} else {
 		free(idx->bwt); free(idx->bns->anns); free(idx->bns);
 		if (!idx->is_shm) free(idx->mem);

@@ -33,6 +33,7 @@
 #include "kvec.h"
 #include "utils.h"
 #include "ksw.h"
+#include <slave.h>
 
 #ifdef USE_MALLOC_WRAPPERS
 #  include "malloc_wrap.h"
@@ -71,13 +72,18 @@ static int cal_sub(const mem_opt_t *opt, mem_alnreg_v *r)
 	return j < r->n? r->a[j].score : opt->min_seed_len * opt->a;
 }
 
-void mem_pestat(const mem_opt_t *opt, int64_t l_pac, int n, const mem_alnreg_v *regs, mem_pestat_t pes[4])
+__uncached long lock_f;
+
+void mem_pestat(const mem_opt_t *opt, int64_t l_pac, int l_pos, int r_pos, const mem_alnreg_v *regs, mem_pestat_t pes[4], int* s_ids)
 {
-	int i, d, max;
+	int d, max;
 	uint64_v isize[4];
 	memset(pes, 0, 4 * sizeof(mem_pestat_t));
 	memset(isize, 0, sizeof(kvec_t(int)) * 4);
-	for (i = 0; i < n>>1; ++i) {
+	//for (int sid = 0; sid < n>>1; ++sid) {
+	for (int sid = l_pos; sid < r_pos; ++sid) {
+        int i = s_ids[sid];
+        //int i = sid;
 		int dir;
 		int64_t is;
 		mem_alnreg_v *r[2];
@@ -94,14 +100,18 @@ void mem_pestat(const mem_opt_t *opt, int64_t l_pac, int n, const mem_alnreg_v *
 	for (d = 0; d < 4; ++d) { // TODO: this block is nearly identical to the one in bwtsw2_pair.c. It would be better to merge these two.
 		mem_pestat_t *r = &pes[d];
 		uint64_v *q = &isize[d];
-		int p25, p50, p75, x;
+		int p25, p50, p75, x, i;
 		if (q->n < MIN_DIR_CNT) {
-			//fprintf(stderr, "[M::%s] skip orientation %c%c as there are not enough pairs\n", __func__, "FR"[d>>1&1], "FR"[d&1]);
+            //athread_lock(&lock_f);
+			//printf("[M::%s] skip orientation %c%c as there are not enough pairs\n", __func__, "FR"[d>>1&1], "FR"[d&1]);
+            //athread_unlock(&lock_f);
 			r->failed = 1;
 			free(q->a);
 			continue;
 		} else {
-            //fprintf(stderr, "[M::%s] analyzing insert size distribution for orientation %c%c...\n", __func__, "FR"[d>>1&1], "FR"[d&1]);
+            //athread_lock(&lock_f);
+            //printf("[M::%s] analyzing insert size distribution for orientation %c%c...\n", __func__, "FR"[d>>1&1], "FR"[d&1]);
+            //athread_unlock(&lock_f);
         }
 		ks_introsort_64(q->n, q->a);
 		p25 = q->a[(int)(.25 * q->n + .499)];
@@ -110,8 +120,10 @@ void mem_pestat(const mem_opt_t *opt, int64_t l_pac, int n, const mem_alnreg_v *
 		r->low  = (int)(p25 - OUTLIER_BOUND * (p75 - p25) + .499);
 		if (r->low < 1) r->low = 1;
 		r->high = (int)(p75 + OUTLIER_BOUND * (p75 - p25) + .499);
-		//fprintf(stderr, "[M::%s] (25, 50, 75) percentile: (%d, %d, %d)\n", __func__, p25, p50, p75);
-		//fprintf(stderr, "[M::%s] low and high boundaries for computing mean and std.dev: (%d, %d)\n", __func__, r->low, r->high);
+        //athread_lock(&lock_f);
+		//printf("[M::%s] (25, 50, 75) percentile: (%d, %d, %d)\n", __func__, p25, p50, p75);
+		//printf("[M::%s] low and high boundaries for computing mean and std.dev: (%d, %d)\n", __func__, r->low, r->high);
+        //athread_unlock(&lock_f);
 		for (i = x = 0, r->avg = 0; i < q->n; ++i)
 			if (q->a[i] >= r->low && q->a[i] <= r->high)
 				r->avg += q->a[i], ++x;
@@ -120,13 +132,17 @@ void mem_pestat(const mem_opt_t *opt, int64_t l_pac, int n, const mem_alnreg_v *
 			if (q->a[i] >= r->low && q->a[i] <= r->high)
 				r->std += (q->a[i] - r->avg) * (q->a[i] - r->avg);
 		r->std = sqrt(r->std / x);
-		//fprintf(stderr, "[M::%s] mean and std.dev: (%.2f, %.2f)\n", __func__, r->avg, r->std);
+        //athread_lock(&lock_f);
+		//printf("[M::%s] mean and std.dev: (%.2f, %.2f)\n", __func__, r->avg, r->std);
+        //athread_unlock(&lock_f);
 		r->low  = (int)(p25 - MAPPING_BOUND * (p75 - p25) + .499);
 		r->high = (int)(p75 + MAPPING_BOUND * (p75 - p25) + .499);
 		if (r->low  > r->avg - MAX_STDDEV * r->std) r->low  = (int)(r->avg - MAX_STDDEV * r->std + .499);
 		if (r->high < r->avg + MAX_STDDEV * r->std) r->high = (int)(r->avg + MAX_STDDEV * r->std + .499);
 		if (r->low < 1) r->low = 1;
-		//fprintf(stderr, "[M::%s] low and high boundaries for proper pairs: (%d, %d)\n", __func__, r->low, r->high);
+        //athread_lock(&lock_f);
+		//printf("[M::%s] low and high boundaries for proper pairs: (%d, %d)\n", __func__, r->low, r->high);
+        //athread_unlock(&lock_f);
 		free(q->a);
 	}
 	for (d = 0, max = 0; d < 4; ++d)
@@ -134,7 +150,9 @@ void mem_pestat(const mem_opt_t *opt, int64_t l_pac, int n, const mem_alnreg_v *
 	for (d = 0; d < 4; ++d)
 		if (pes[d].failed == 0 && isize[d].n < max * MIN_DIR_RATIO) {
 			pes[d].failed = 1;
-			//fprintf(stderr, "[M::%s] skip orientation %c%c\n", __func__, "FR"[d>>1&1], "FR"[d&1]);
+            //athread_lock(&lock_f);
+			//printf("[M::%s] skip orientation %c%c\n", __func__, "FR"[d>>1&1], "FR"[d&1]);
+            //athread_unlock(&lock_f);
 		}
 }
 

@@ -1795,6 +1795,81 @@ void worker2_fast(void *data, int i, int tid, int *sam_lens, char **cpe_sams)
 }
 
 
+void worker12_pre_fast(void *data, int l_pos, int r_pos, int tid, int *sam_lens, char **cpe_sams, const mem_pestat_t *pes0, int* s_ids)
+{
+    extern int mem_sam_pe(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, const mem_pestat_t pes[4], uint64_t id, bseq1_t s[2], mem_alnreg_v a[2]);
+    extern void mem_reg2ovlp(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, bseq1_t *s, mem_alnreg_v *a);
+    worker_t *w = (worker_t*)data;
+
+    lwpf_start(l_worker1_1);
+    if (!(w->opt->flag&MEM_F_PE)) {
+        fprintf("stderr", "TODO and test\n");
+        exit(0);
+    } else {
+        for(int sid = l_pos; sid < r_pos; sid++) {
+            int i = s_ids[sid];
+            //int i = sid;
+            w->regs[i<<1|0] = mem_align1_core(i * 2, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|0].l_seq, w->seqs[i<<1|0].seq, w->aux[tid]);
+            w->regs[i<<1|1] = mem_align1_core(i * 2 + 1, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|1].l_seq, w->seqs[i<<1|1].seq, w->aux[tid]);
+        }
+    }
+    lwpf_stop(l_worker1_1);
+
+    lwpf_start(l_worker1_2);
+    mem_pestat_t pes[4];
+//    w->pes = &pes[0];
+    int local_n = r_pos - l_pos;
+    if (w->opt->flag&MEM_F_PE) { // infer insert sizes if not provided
+        if (pes0) memcpy(pes, pes0, 4 * sizeof(mem_pestat_t));
+        else mem_pestat(w->opt, w->bns->l_pac, l_pos, r_pos, w->regs, pes, s_ids);
+    }
+    lwpf_stop(l_worker1_2);
+
+    lwpf_start(l_worker2_1);
+    if (!(w->opt->flag&MEM_F_PE)) {
+        fprintf("stderr", "TODO and test\n");
+        exit(0);
+    } else {
+        for(int sid = l_pos; sid < r_pos; sid++) {
+            int i = s_ids[sid];
+            //int i = sid;
+            bseq1_t tmp_seq[2];
+            for (int id = 0; id < 2; id++) {
+                tmp_seq[id] = w->seqs[i<<1|id];
+            }
+//            mem_sam_pe(w->opt, w->bns, w->pac, w->pes, (w->n_processed>>1) + i, &w->seqs[i<<1], &w->regs[i<<1]);
+            mem_sam_pe(w->opt, w->bns, w->pac, pes, (w->n_processed>>1) + i, tmp_seq, &w->regs[i<<1]);
+            free(w->regs[i<<1|0].a); free(w->regs[i<<1|1].a);
+            for(int id = 0; id < 2; id++) {
+                int cpe_sam_len = strlen(tmp_seq[id].sam);
+                cpe_sams[i<<1|id] = tmp_seq[id].sam;
+                sam_lens[i<<1|id] = cpe_sam_len;
+            }
+        }
+    }
+    lwpf_stop(l_worker2_1);
+}
+
+void worker12_fast(void *data, int l_pos, int r_pos, int tid, int *sam_lens, char **cpe_sams, int* s_ids)
+{
+    worker_t *w = (worker_t*)data;
+    if (!(w->opt->flag&MEM_F_PE)) {
+        fprintf("stderr", "TODO and test\n");
+        exit(0);
+    } else {
+        for(int sid = l_pos; sid < r_pos; sid++) {
+            int i = s_ids[sid];
+            //int i = sid;
+            for(int id = 0; id < 2; id++) {
+                memcpy(w->seqs[i<<1|id].sam, cpe_sams[i<<1|id], sam_lens[i<<1|id] * sizeof(char));
+                w->seqs[i<<1|id].sam[sam_lens[i<<1|id]] = '\0';
+                if(cpe_sams[i<<1|id]) free(cpe_sams[i<<1|id]);
+            }
+        }
+    }
+}
+
+
 void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bns, const uint8_t *pac, int64_t n_processed, int n, bseq1_t *seqs, const mem_pestat_t *pes0)
 {
 

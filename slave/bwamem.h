@@ -140,6 +140,8 @@ extern "C" {
     void worker1_fast(void *data, int i, int tid, mem_alnreg_v* cpe_regs);
     void worker2_pre_fast(void *data, int i, int tid, int *sam_lens, char **cpe_sams);
     void worker2_fast(void *data, int i, int tid, int *sam_lens, char **cpe_sams);
+    void worker12_pre_fast(void *data, int l_pos, int r_pos, int tid, int *sam_lens, char **cpe_sams, const mem_pestat_t *pes0, int* s_ids);
+    void worker12_fast(void *data, int l_pos, int r_pos, int tid, int *sam_lens, char **cpe_sams, int* s_ids);
 	smem_i *smem_itr_init(const bwt_t *bwt);
 	void smem_itr_destroy(smem_i *itr);
 	void smem_set_query(smem_i *itr, int len, const uint8_t *query);
@@ -217,7 +219,7 @@ extern "C" {
 	 * @param regs   region array of size $n; 2i-th and (2i+1)-th elements constitute a pair
 	 * @param pes    inferred insert size distribution (output)
 	 */
-	void mem_pestat(const mem_opt_t *opt, int64_t l_pac, int n, const mem_alnreg_v *regs, mem_pestat_t pes[4]);
+	void mem_pestat(const mem_opt_t *opt, int64_t l_pac, int l_pos, int r_pos, const mem_alnreg_v *regs, mem_pestat_t pes[4], int* s_ids);
 
 #ifdef __cplusplus
 }

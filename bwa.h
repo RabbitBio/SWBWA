@@ -57,6 +57,7 @@ typedef struct {
 
 typedef struct {
 	int l_seq, id;
+    int is_new_addr;
 	char *name, *comment, *seq, *qual, *sam;
 } bseq1_t;
 

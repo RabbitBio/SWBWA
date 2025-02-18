@@ -315,6 +315,7 @@ int bwa_idx_build(const char *fa, const char *prefix, int algo_type, int block_s
 		bwt = bwt_restore_bwt(str);
         //TODO big big sa size
 		bwt_cal_sa(bwt, 32);
+		//printf("bwt cal sa, compress level 8\n");
 		//bwt_cal_sa(bwt, 8);
 		bwt_dump_sa(str3, bwt);
 		bwt_destroy(bwt);

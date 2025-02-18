@@ -103,6 +103,7 @@ int main(int argc, char *argv[])
 
     //athread_init();
 
+    //htmalloccount_init();
 	extern char *bwa_pg;
 	int i, ret;
 	double t_real;
@@ -144,6 +145,7 @@ int main(int argc, char *argv[])
 	}
 	free(bwa_pg);
 
+    //htmalloccount_print();
     //athread_halt();
 
     MPI_Finalize();

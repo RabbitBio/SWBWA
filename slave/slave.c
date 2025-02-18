@@ -140,25 +140,28 @@ void print_icache_info() {
     athread_unlock(&lock_s);
 }
 
-#define read_num_pre_block 256
+#define read_num_pre_block 1
 
-//#define use_dynamic_task
+#define use_dynamic_task
 
 #ifdef use_dynamic_task
-__uncached __cross long work_counter;
-__thread_local int task_list[1 << 10];
-__thread_local int task_num;
-__thread_local int cur_id;
+//__uncached __cross long work_counter;
+__uncached long work_counter;
+int task_list[384][50 << 10];
+int task_num[384];
+int cur_id[384];
 
 int acquire_task(int block_num) {
     asm volatile("faal %0, 0(%1)\n\t"
-                 : "=r"(cur_id)
+                 : "=r"(cur_id[global_pen])
                  : "r"(&work_counter)
                  : "memory");
-    if (cur_id < block_num) {
-        task_list[task_num++] = cur_id;
+    if (cur_id[global_pen] < block_num) {
+        //assert(task_num[global_pen] < (50 << 10));
+        //printf("CG %d, size %d\n", _CGN, task_num[global_pen]);
+        task_list[global_pen][task_num[global_pen]++] = cur_id[global_pen];
     }
-    return cur_id;
+    return cur_id[global_pen];
 }
 #endif
 
@@ -187,13 +190,17 @@ void worker1_s_pre_fast_cross() {
     lwpf_start(l_worker1_1);
 
 #ifdef use_dynamic_task
-    if(_MYID == 0) work_counter = 0;
+    if(global_pen == 0) work_counter = 0;
+# ifdef use_cgs_mode
     athread_ssync_node();
-    task_num = 0;
+# else
+    athread_ssync_array();
+# endif
+    task_num[global_pen] = 0;
     int block_num = ceil(1.0 * para->nn / read_num_pre_block);
     for(int i = acquire_task(block_num); i < block_num; i = acquire_task(block_num)) {
-        int range_l = i * block_num;
-        int range_r = range_l + block_num;
+        int range_l = i * read_num_pre_block;
+        int range_r = range_l + read_num_pre_block;
         if(range_r > para->nn) range_r = para->nn;
         for(int j = range_l; j < range_r; j++) {
             worker1_pre_fast(para->data, j, global_pen, para->cpe_regs);
@@ -236,10 +243,9 @@ void worker1_s_fast_cross() {
     lwpf_start(l_worker1_2);
 
 #ifdef use_dynamic_task
-    int block_num = ceil(1.0 * para->nn / read_num_pre_block);
-    for(long i = 0; i < task_num; i++) {
-        int range_l = task_list[i] * block_num;
-        int range_r = range_l + block_num;
+    for(long i = 0; i < task_num[global_pen]; i++) {
+        int range_l = task_list[global_pen][i] * read_num_pre_block;
+        int range_r = range_l + read_num_pre_block;
         if(range_r > para->nn) range_r = para->nn;
         for(int j = range_l; j < range_r; j++) {
             worker1_fast(para->data, j, global_pen, para->cpe_regs);
@@ -282,13 +288,17 @@ void worker2_s_pre_fast_cross() {
     lwpf_start(l_worker2_1);
 
 #ifdef use_dynamic_task
-    if(_MYID == 0) work_counter = 0;
+    if(global_pen == 0) work_counter = 0;
+#ifdef use_cgs_mode
     athread_ssync_node();
-    task_num = 0;
+#else
+    athread_ssync_array();
+#endif
+    task_num[global_pen] = 0;
     int block_num = ceil(1.0 * para->nn / read_num_pre_block);
     for(int i = acquire_task(block_num); i < block_num; i = acquire_task(block_num)) {
-        int range_l = i * block_num;
-        int range_r = range_l + block_num;
+        int range_l = i * read_num_pre_block;
+        int range_r = range_l + read_num_pre_block;
         if(range_r > para->nn) range_r = para->nn;
         for(int j = range_l; j < range_r; j++) {
             worker2_pre_fast(para->data, j, global_pen, para->sam_lens, para->cpe_sams);
@@ -331,10 +341,9 @@ void worker2_s_fast_cross() {
     lwpf_enter(TEST);
     lwpf_start(l_worker2_2);
 #ifdef use_dynamic_task
-    int block_num = ceil(1.0 * para->nn / read_num_pre_block);
-    for(long i = 0; i < task_num; i++) {
-        int range_l = task_list[i] * block_num;
-        int range_r = range_l + block_num;
+    for(long i = 0; i < task_num[global_pen]; i++) {
+        int range_l = task_list[global_pen][i] * read_num_pre_block;
+        int range_r = range_l + read_num_pre_block;
         if(range_r > para->nn) range_r = para->nn;
         for(int j = range_l; j < range_r; j++) {
             worker2_fast(para->data, j, global_pen, para->sam_lens, para->cpe_sams);
@@ -363,6 +372,7 @@ void worker12_s_pre_fast_cross() {
     unsigned long init_csr_value = 0;
     asm volatile("rcsr %0, 0xc4" : "=r"(init_csr_value));
     if(init_csr_value < 0x500000000000) {
+    //if(0) {
         unsigned long new_csr_value = pp_slave->priv_addr + csr_copy_size * _MYID + init_csr_value - private_start;
         if(_MYID == 0) {
             printf("init_csr_value %p\n", (void*)init_csr_value);
@@ -376,11 +386,31 @@ void worker12_s_pre_fast_cross() {
     Para_worker12_s *para = pp_slave;
     lwpf_enter(TEST);
     lwpf_start(l_worker12_1);
+#ifdef use_dynamic_task
+    if(global_pen == 0) work_counter = 0;
+#ifdef use_cgs_mode
+    athread_ssync_node();
+#else
+    athread_ssync_array();
+#endif
+    task_num[global_pen] = 0;
+    int block_num = ceil(1.0 * para->nn / read_num_pre_block);
+    for(int i = acquire_task(block_num); i < block_num; i = acquire_task(block_num)) {
+        int l_pos = i * read_num_pre_block;
+        int r_pos = l_pos + read_num_pre_block;
+        if(r_pos > para->nn) r_pos = para->nn;
+        lwpf_start(l_worker12i_1);
+        worker12_pre_fast(para->data, l_pos, r_pos, global_pen, para->sam_lens, para->cpe_sams, para->pes0, para->s_ids);
+        lwpf_stop(l_worker12i_1);
+    }
+#else
     int pre_n = ceil(1.0 * para->nn / cpe_num_slave);
     int l_pos = global_pen * pre_n;
     int r_pos = l_pos + pre_n;
     if(r_pos > para->nn) r_pos = para->nn;
     worker12_pre_fast(para->data, l_pos, r_pos, global_pen, para->sam_lens, para->cpe_sams, para->pes0, para->s_ids);
+#endif
+
     lwpf_stop(l_worker12_1);
     lwpf_exit(TEST);
 
@@ -396,6 +426,7 @@ void worker12_s_fast_cross() {
     unsigned long init_csr_value = 0;
     asm volatile("rcsr %0, 0xc4" : "=r"(init_csr_value));
     if(init_csr_value < 0x500000000000) {
+    //if(0) {
         unsigned long new_csr_value = pp_slave->priv_addr + csr_copy_size * _MYID + init_csr_value - private_start;
         if(_MYID == 0) {
             printf("init_csr_value %p\n", (void*)init_csr_value);
@@ -409,11 +440,21 @@ void worker12_s_fast_cross() {
     Para_worker12_s *para = pp_slave;
     lwpf_enter(TEST);
     lwpf_start(l_worker12_2);
+#ifdef use_dynamic_task
+    for(long i = 0; i < task_num[global_pen]; i++) {
+        int l_pos = task_list[global_pen][i] * read_num_pre_block;
+        int r_pos = l_pos + read_num_pre_block;
+        if(r_pos > para->nn) r_pos = para->nn;
+        worker12_fast(para->data, l_pos, r_pos, global_pen, para->sam_lens, para->cpe_sams, para->s_ids);
+    }
+#else
     int pre_n = ceil(1.0 * para->nn / cpe_num_slave);
     int l_pos = global_pen * pre_n;
     int r_pos = l_pos + pre_n;
     if(r_pos > para->nn) r_pos = para->nn;
     worker12_fast(para->data, l_pos, r_pos, global_pen, para->sam_lens, para->cpe_sams, para->s_ids);
+#endif
+
     lwpf_stop(l_worker12_2);
     lwpf_exit(TEST);
 
@@ -427,10 +468,29 @@ void worker1_s_pre_fast(Para_worker12_s *para) {
  
     lwpf_enter(TEST);
     lwpf_start(l_worker1_1);
-
+#ifdef use_dynamic_task
+# ifdef use_cgs_mode
+    if(global_pen == 0) work_counter = 0;
+    athread_ssync_node();
+# else
+    if(_PEN == 0) work_counter = 0;
+    athread_ssync_array();
+# endif
+    task_num[global_pen] = 0;
+    int block_num = ceil(1.0 * para->nn / read_num_pre_block);
+    for(int i = acquire_task(block_num); i < block_num; i = acquire_task(block_num)) {
+        int range_l = i * read_num_pre_block;
+        int range_r = range_l + read_num_pre_block;
+        if(range_r > para->nn) range_r = para->nn;
+        for(int j = range_l; j < range_r; j++) {
+            worker1_pre_fast(para->data, j, global_pen, para->cpe_regs);
+        }
+    }
+#else
     for(long i = global_pen; i < para->nn; i += cpe_num_slave) {
         worker1_pre_fast(para->data, i, global_pen, para->cpe_regs);
     }
+#endif
     lwpf_stop(l_worker1_1);
     lwpf_exit(TEST);
 }
@@ -438,9 +498,20 @@ void worker1_s_pre_fast(Para_worker12_s *para) {
 void worker1_s_fast(Para_worker12_s *para) {
     lwpf_enter(TEST);
     lwpf_start(l_worker1_2);
+#ifdef use_dynamic_task
+    for(long i = 0; i < task_num[global_pen]; i++) {
+        int range_l = task_list[global_pen][i] * read_num_pre_block;
+        int range_r = range_l + read_num_pre_block;
+        if(range_r > para->nn) range_r = para->nn;
+        for(int j = range_l; j < range_r; j++) {
+            worker1_fast(para->data, j, global_pen, para->cpe_regs);
+        }
+    }
+#else
     for(long i = global_pen; i < para->nn; i += cpe_num_slave) {
         worker1_fast(para->data, i, global_pen, para->cpe_regs);
     }
+#endif
     lwpf_stop(l_worker1_2);
     lwpf_exit(TEST);
 
@@ -451,9 +522,28 @@ void worker1_s_fast(Para_worker12_s *para) {
 void worker2_s_pre_fast(Para_worker12_s *para) {
     lwpf_enter(TEST);
     lwpf_start(l_worker2_1);
+#ifdef use_dynamic_task
+    if(global_pen == 0) work_counter = 0;
+#ifdef use_cgs_mode
+    athread_ssync_node();
+#else
+    athread_ssync_array();
+#endif
+    task_num[global_pen] = 0;
+    int block_num = ceil(1.0 * para->nn / read_num_pre_block);
+    for(int i = acquire_task(block_num); i < block_num; i = acquire_task(block_num)) {
+        int range_l = i * read_num_pre_block;
+        int range_r = range_l + read_num_pre_block;
+        if(range_r > para->nn) range_r = para->nn;
+        for(int j = range_l; j < range_r; j++) {
+            worker2_pre_fast(para->data, j, global_pen, para->sam_lens, para->cpe_sams);
+        }
+    }
+#else
     for(long i = global_pen; i < para->nn; i += cpe_num_slave) {
         worker2_pre_fast(para->data, i, global_pen, para->sam_lens, para->cpe_sams);
     }
+#endif
     lwpf_stop(l_worker2_1);
     lwpf_exit(TEST);
 
@@ -463,9 +553,20 @@ void worker2_s_pre_fast(Para_worker12_s *para) {
 void worker2_s_fast(Para_worker12_s *para) {
     lwpf_enter(TEST);
     lwpf_start(l_worker2_2);
+#ifdef use_dynamic_task
+    for(long i = 0; i < task_num[global_pen]; i++) {
+        int range_l = task_list[global_pen][i] * read_num_pre_block;
+        int range_r = range_l + read_num_pre_block;
+        if(range_r > para->nn) range_r = para->nn;
+        for(int j = range_l; j < range_r; j++) {
+            worker2_fast(para->data, j, global_pen, para->sam_lens, para->cpe_sams);
+        }
+    }
+#else
     for(long i = global_pen; i < para->nn; i += cpe_num_slave) {
         worker2_fast(para->data, i, global_pen, para->sam_lens, para->cpe_sams);
     }
+#endif
     lwpf_stop(l_worker2_2);
     lwpf_exit(TEST);
 
@@ -476,11 +577,30 @@ void worker2_s_fast(Para_worker12_s *para) {
 void worker12_s_pre_fast(Para_worker12_s *para) {
     lwpf_enter(TEST);
     lwpf_start(l_worker12_1);
+#ifdef use_dynamic_task
+    if(global_pen == 0) work_counter = 0;
+#ifdef use_cgs_mode
+    athread_ssync_node();
+#else
+    athread_ssync_array();
+#endif
+    task_num[global_pen] = 0;
+    int block_num = ceil(1.0 * para->nn / read_num_pre_block);
+    for(int i = acquire_task(block_num); i < block_num; i = acquire_task(block_num)) {
+        int l_pos = i * read_num_pre_block;
+        int r_pos = l_pos + read_num_pre_block;
+        if(r_pos > para->nn) r_pos = para->nn;
+        lwpf_start(l_worker12i_1);
+        worker12_pre_fast(para->data, l_pos, r_pos, global_pen, para->sam_lens, para->cpe_sams, para->pes0, para->s_ids);
+        lwpf_stop(l_worker12i_1);
+    }
+#else
     int pre_n = ceil(1.0 * para->nn / cpe_num_slave);
     int l_pos = global_pen * pre_n;
     int r_pos = l_pos + pre_n;
     if(r_pos > para->nn) r_pos = para->nn;
     worker12_pre_fast(para->data, l_pos, r_pos, global_pen, para->sam_lens, para->cpe_sams, para->pes0, para->s_ids);
+#endif
     lwpf_stop(l_worker12_1);
     lwpf_exit(TEST);
 }
@@ -489,11 +609,20 @@ void worker12_s_pre_fast(Para_worker12_s *para) {
 void worker12_s_fast(Para_worker12_s *para) {
     lwpf_enter(TEST);
     lwpf_start(l_worker12_2);
+#ifdef use_dynamic_task
+    for(long i = 0; i < task_num[global_pen]; i++) {
+        int l_pos = task_list[global_pen][i] * read_num_pre_block;
+        int r_pos = l_pos + read_num_pre_block;
+        if(r_pos > para->nn) r_pos = para->nn;
+        worker12_fast(para->data, l_pos, r_pos, global_pen, para->sam_lens, para->cpe_sams, para->s_ids);
+    }
+#else
     int pre_n = ceil(1.0 * para->nn / cpe_num_slave);
     int l_pos = global_pen * pre_n;
     int r_pos = l_pos + pre_n;
     if(r_pos > para->nn) r_pos = para->nn;
     worker12_fast(para->data, l_pos, r_pos, global_pen, para->sam_lens, para->cpe_sams, para->s_ids);
+#endif
     lwpf_stop(l_worker12_2);
     lwpf_exit(TEST);
 }

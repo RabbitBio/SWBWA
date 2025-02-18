@@ -2,6 +2,7 @@ CC=		 	mpicc
 CXX= 	    mpicxx
 #CC=			clang --analyze
 CFLAGS= -w -g -Wall -Wno-unused-function -O2 -D_GNU_SOURCE  -I/home/swtest/ylf/lwpf3_cgs
+#CFLAGS= -w -g -Wall -Wno-unused-function -O2 -D_GNU_SOURCE  -I/home/swtest/lwpf3
 
 #-fprofile-swperf
 #CFLAGS=		-g -Wall -Wno-unused-function
@@ -17,7 +18,7 @@ AOBJS=		bwashm.o bwase.o bwaseqio.o bwtgap.o bwtaln.o bamlite.o \
 			bwtsw2_chain.o fastmap.o bwtsw2_pair.o
 PROG=		bwa
 INCLUDES=	
-LIBS= -Wl,-q -lm -lz -lpthread -lm_slave
+LIBS= -Wl,-q -static -lm -lz -lpthread -lm_slave
 #-lswperf
 SUBDIRS=	.
 

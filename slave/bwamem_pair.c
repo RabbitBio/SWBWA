@@ -82,8 +82,8 @@ void mem_pestat(const mem_opt_t *opt, int64_t l_pac, int l_pos, int r_pos, const
 	memset(isize, 0, sizeof(kvec_t(int)) * 4);
 	//for (int sid = 0; sid < n>>1; ++sid) {
 	for (int sid = l_pos; sid < r_pos; ++sid) {
-        int i = s_ids[sid];
-        //int i = sid;
+        //int i = s_ids[sid];
+        int i = sid;
 		int dir;
 		int64_t is;
 		mem_alnreg_v *r[2];

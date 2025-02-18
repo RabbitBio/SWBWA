@@ -1329,9 +1329,9 @@ typedef struct{
 
 /***********************************************************/
 unsigned long segment1 = 0x00004ffff0410000;
-unsigned long segment1_len = 0x000000000039b530;
+unsigned long segment1_len = 0x00000000003990d8;
 unsigned long segment2 = 0x0000500000004040;
-unsigned long segment2_len = 0x0000000000085c48;
+unsigned long segment2_len = 0x0000000004b85e88;
 /***********************************************************/
 
 __uncached int cpe_is_over[cpe_num];
@@ -1479,7 +1479,7 @@ void mem_process_seqs_merge(const mem_opt_t *opt, const bwt_t *bwt, const bntseq
     int my_rank = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
 
-    assert(n < (4 << 20));
+    //assert(n < (4 << 20));
     worker_t w;
     double ctime, rtime;
     ctime = cputime(); rtime = realtime();
@@ -1505,13 +1505,13 @@ void mem_process_seqs_merge(const mem_opt_t *opt, const bwt_t *bwt, const bntseq
     static int cntt = 0;
     static unsigned long host_gp;
     static Para_worker12_s *para;
-    static int* shuffle_ids = -1;
+    static int* shuffle_ids;
     static int pre_nn;
 
     cntt++;
     if(cntt == 1) {
         para = (Para_worker12_s*)malloc(sizeof(Para_worker12_s));
-        shuffle_ids = malloc((4 << 20) * sizeof(int));
+        //shuffle_ids = malloc((4 << 20) * sizeof(int));
     }
 
     para->nn = nn;
@@ -1607,13 +1607,13 @@ void mem_process_seqs_merge(const mem_opt_t *opt, const bwt_t *bwt, const bntseq
 
     }
 #endif
-	if(para->nn != pre_nn) {
-		for(int i = 0; i < para->nn; i++) {
-			shuffle_ids[i] = i;
-		}
-		shuffle(shuffle_ids, para->nn);
-        pre_nn = para->nn;
-	}
+	//if(para->nn != pre_nn) {
+	//	for(int i = 0; i < para->nn; i++) {
+	//		shuffle_ids[i] = i;
+	//	}
+	//	shuffle(shuffle_ids, para->nn);
+    //    pre_nn = para->nn;
+	//}
 	para->s_ids = shuffle_ids;
     t_work1_1 += GetTime() - tt0;
 
@@ -1631,12 +1631,34 @@ void mem_process_seqs_merge(const mem_opt_t *opt, const bwt_t *bwt, const bntseq
     t_work1_2 += GetTime() - tt0;
 
 
+#define BLOCK_SIZE (64 * 1024) // 64KB
     tt0 = GetTime();
-    for(int i = 0; i < n; i++) {
-        w.seqs[i].sam = malloc((para->sam_lens[i]) * sizeof(char) + 1);
-        memset(w.seqs[i].sam, 'A', (para->sam_lens[i]) * sizeof(char));
+	char *current_block = NULL;
+    size_t current_offset = BLOCK_SIZE;
+
+    for (int i = 0; i < n; i++) {
+        //TODO why + 1 is wrong!
+        size_t len = para->sam_lens[i] + 10;
+        if (current_offset + len > BLOCK_SIZE) {
+            //current_block = wrap_malloc(BLOCK_SIZE);
+            current_block = malloc(BLOCK_SIZE);
+            if(current_block == NULL) fprintf(stderr, "GG malloc %d\n", BLOCK_SIZE);
+            current_offset = 0;
+            w.seqs[i].is_new_addr = 1;
+            memset(current_block, 'A', BLOCK_SIZE);
+        } else {
+            w.seqs[i].is_new_addr = 0;
+        }
+        w.seqs[i].sam = current_block + current_offset;
+        current_offset += len;
         w.seqs[i].sam[(para->sam_lens[i])] = '\0';
     }
+    
+    //for(int i = 0; i < n; i++) {
+    //    w.seqs[i].sam = malloc((para->sam_lens[i]) * sizeof(char) + 1);
+    //    memset(w.seqs[i].sam, 'A', (para->sam_lens[i]) * sizeof(char));
+    //    w.seqs[i].sam[(para->sam_lens[i])] = '\0';
+    //}
     t_work1_3 += GetTime() - tt0;
 
 

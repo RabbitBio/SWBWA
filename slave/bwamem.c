@@ -1807,8 +1807,8 @@ void worker12_pre_fast(void *data, int l_pos, int r_pos, int tid, int *sam_lens,
         exit(0);
     } else {
         for(int sid = l_pos; sid < r_pos; sid++) {
-            int i = s_ids[sid];
-            //int i = sid;
+            //int i = s_ids[sid];
+            int i = sid;
             w->regs[i<<1|0] = mem_align1_core(i * 2, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|0].l_seq, w->seqs[i<<1|0].seq, w->aux[tid]);
             w->regs[i<<1|1] = mem_align1_core(i * 2 + 1, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|1].l_seq, w->seqs[i<<1|1].seq, w->aux[tid]);
         }
@@ -1831,8 +1831,8 @@ void worker12_pre_fast(void *data, int l_pos, int r_pos, int tid, int *sam_lens,
         exit(0);
     } else {
         for(int sid = l_pos; sid < r_pos; sid++) {
-            int i = s_ids[sid];
-            //int i = sid;
+            //int i = s_ids[sid];
+            int i = sid;
             bseq1_t tmp_seq[2];
             for (int id = 0; id < 2; id++) {
                 tmp_seq[id] = w->seqs[i<<1|id];
@@ -1858,8 +1858,8 @@ void worker12_fast(void *data, int l_pos, int r_pos, int tid, int *sam_lens, cha
         exit(0);
     } else {
         for(int sid = l_pos; sid < r_pos; sid++) {
-            int i = s_ids[sid];
-            //int i = sid;
+            //int i = s_ids[sid];
+            int i = sid;
             for(int id = 0; id < 2; id++) {
                 memcpy(w->seqs[i<<1|id].sam, cpe_sams[i<<1|id], sam_lens[i<<1|id] * sizeof(char));
                 w->seqs[i<<1|id].sam[sam_lens[i<<1|id]] = '\0';

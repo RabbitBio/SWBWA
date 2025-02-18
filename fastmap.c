@@ -47,6 +47,10 @@ KSEQ_DECLARE(int)
 extern unsigned char nst_nt4_table[256];
 
 
+#define use_cgs_mode
+
+//#define use_my_mpi
+
 //#define use_lwpf3
 
 #ifdef use_lwpf3
@@ -189,7 +193,11 @@ static void *process(void *shared, int step, void *_data)
 			//if (data->seqs[i].sam) err_fputs(data->seqs[i].sam, stdout);
 			free(data->seqs[i].name); free(data->seqs[i].comment);
 			free(data->seqs[i].seq); free(data->seqs[i].qual);
-            free(data->seqs[i].sam);
+			if (data->seqs[i].is_new_addr == 1) {
+				//wrap_free(data->seqs[i].sam);
+				free(data->seqs[i].sam);
+			}
+            //free(data->seqs[i].sam);
 		}
 		free(data->seqs); free(data);
         t_step3 += GetTime() - t0;
@@ -218,7 +226,6 @@ static void update_a(mem_opt_t *opt, const mem_opt_t *opt0)
 
 int main_mem(int argc, char *argv[])
 {
-//#define use_my_mpi
 
     int local_my_rank = 0;
 #ifdef use_my_mpi
@@ -521,9 +528,11 @@ int main_mem(int argc, char *argv[])
 	aux.actual_chunk_size = fixed_chunk_size > 0? fixed_chunk_size : opt->chunk_size * opt->n_threads;
     double t0 = GetTime();
 
-
-    //athread_init();
+#ifdef use_cgs_mode
     athread_init_cgs();
+#else
+    athread_init();
+#endif
 
 
 #ifdef use_swlu

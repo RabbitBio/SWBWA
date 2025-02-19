@@ -23,7 +23,16 @@ typedef struct{
     void *priv_addr;
     int tls_size;
     unsigned long *tls_content;
+    char* big_buffer;
+    long long cpe_buffer_size;
 } Para_worker12_s;
+
+typedef struct{
+    char* big_buffer;
+    long long cpe_buffer_size;
+} Para_malloc;
+
+
 
 /***********************************************************/
 extern unsigned long segment1;
@@ -47,7 +56,31 @@ extern unsigned long segment2_len;
 #define private_start 0x400000000000
 
 
+
 __thread Para_worker12_s *pp_slave;
+
+void state_init(Para_malloc *para) {
+ 
+    //printf("cpe set buffer %p %lld\n", para->big_buffer, para->cpe_buffer_size);
+    set_big_buffer(para->big_buffer, para->cpe_buffer_size);
+    //htmalloccount_init();
+}
+
+void state_print() {
+    //fprintf(stderr, "%d state print start\n", _MYID);
+    //htmalloccount_print();
+    //fprintf(stderr, "%d state print done\n", _MYID);
+}
+
+void state_print_cross() {
+    fprintf(stderr, "%d state print start\n", _MYID);
+    htmalloccount_print();
+    fprintf(stderr, "%d state print done\n", _MYID);
+    pp_slave->tag[global_pen] = 1;
+    flush_slave_cache();
+    while(1);
+}
+
 
 void pass_para(Para_worker12_s *ptr)
 {
@@ -383,6 +416,9 @@ void worker12_s_pre_fast_cross() {
         asm volatile("wcsr %0, 0xc4\n\t"::"r"(new_csr_value):);
     }
 
+    //printf("cpe set buffer %p %lld\n", pp_slave->big_buffer, pp_slave->cpe_buffer_size);
+    //set_big_buffer(pp_slave->big_buffer, pp_slave->cpe_buffer_size);
+
     Para_worker12_s *para = pp_slave;
     lwpf_enter(TEST);
     lwpf_start(l_worker12_1);
@@ -575,6 +611,10 @@ void worker2_s_fast(Para_worker12_s *para) {
 
 
 void worker12_s_pre_fast(Para_worker12_s *para) {
+
+    //printf("cpe set buffer %p %lld\n", para->big_buffer, para->cpe_buffer_size);
+    //set_big_buffer(para->big_buffer, para->cpe_buffer_size);
+
     lwpf_enter(TEST);
     lwpf_start(l_worker12_1);
 #ifdef use_dynamic_task

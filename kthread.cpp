@@ -181,7 +181,7 @@ void set_thread_affinity(int cpu_id) {
 std::mutex mtx;
 
 void reader_thread(ktp_t* p, MyQueue& queue, std::atomic<bool>& done_reading) {
-    //set_thread_affinity(get_target_cpu());
+    //set_thread_affinity(1);
     DataType data = nullptr;
     while (true) {
 
@@ -233,7 +233,7 @@ void processor_thread(ktp_t* p, MyQueue& read_queue, MyQueue& write_queue, std::
 }
 
 void writer_thread(ktp_t* p, MyQueue& queue, std::atomic<bool>& done_processing) {
-    //set_thread_affinity(get_target_cpu());
+    //set_thread_affinity(4);
     DataType item = nullptr;
     bool overWhile = 0;
     while (true) {
@@ -257,6 +257,7 @@ void writer_thread(ktp_t* p, MyQueue& queue, std::atomic<bool>& done_processing)
 }
 
 extern "C" void kt_pipeline_queue(int n_threads, void* (*func)(void*, int, void*), void* shared_data, int n_steps) {
+
     ktp_t aux;
     aux.func = func;
     aux.shared = shared_data;
@@ -285,7 +286,6 @@ extern "C" void kt_pipeline_queue(int n_threads, void* (*func)(void*, int, void*
     std::thread writer(writer_thread, &aux, std::ref(write_queue), std::ref(done_processing));
 
     processor_thread(&aux, read_queue, write_queue, done_reading, done_processing);
-
     reader.join();
     //processor.join();
     writer.join();

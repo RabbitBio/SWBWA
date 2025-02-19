@@ -1309,6 +1309,8 @@ typedef struct{
     void *priv_addr;
     int tls_size;
     unsigned long *tls_content;
+    char* big_buffer;
+    long long cpe_buffer_size;
 } Para_worker12_s;
 
 
@@ -1329,9 +1331,9 @@ typedef struct{
 
 /***********************************************************/
 unsigned long segment1 = 0x00004ffff0410000;
-unsigned long segment1_len = 0x00000000003990d8;
+unsigned long segment1_len = 0x000000000039f9a8;
 unsigned long segment2 = 0x0000500000004040;
-unsigned long segment2_len = 0x0000000004b85e88;
+unsigned long segment2_len = 0x0000000007d65248;
 /***********************************************************/
 
 __uncached int cpe_is_over[cpe_num];
@@ -1459,7 +1461,6 @@ void my_spawn_join(long fun_addr) {
     }
 }
 
-//int shuffle_ids[4 << 20];
 
 void shuffle(int *array, int n) {
 	srand((unsigned int)time(NULL));
@@ -1470,6 +1471,8 @@ void shuffle(int *array, int n) {
         array[j] = temp;
     }
 }
+
+#define cpe_malloc_tot_size (8ll << 30)
 
 void mem_process_seqs_merge(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bns, const uint8_t *pac, int64_t n_processed, int n, bseq1_t *seqs, const mem_pestat_t *pes0)
 {
@@ -1505,13 +1508,16 @@ void mem_process_seqs_merge(const mem_opt_t *opt, const bwt_t *bwt, const bntseq
     static int cntt = 0;
     static unsigned long host_gp;
     static Para_worker12_s *para;
-    static int* shuffle_ids;
     static int pre_nn;
 
     cntt++;
     if(cntt == 1) {
         para = (Para_worker12_s*)malloc(sizeof(Para_worker12_s));
-        //shuffle_ids = malloc((4 << 20) * sizeof(int));
+        //char* big_buffer = (char*)_sw_xmalloc(cpe_malloc_tot_size);
+        //memset(big_buffer, 0, cpe_malloc_tot_size);
+        //para->big_buffer = big_buffer;
+        //para->cpe_buffer_size = cpe_malloc_tot_size / cpe_num;
+        //printf("malloc big buffer done, tot size %lld, cpe size %lld\n", cpe_malloc_tot_size, para->cpe_buffer_size);
     }
 
     para->nn = nn;
@@ -1524,6 +1530,7 @@ void mem_process_seqs_merge(const mem_opt_t *opt, const bwt_t *bwt, const bntseq
 
 #ifdef use_cgs_mode
     if(cntt == 1) {
+    //if(0) {
         double cross_time_begin = GetTime();
         add_exec();
 
@@ -1607,14 +1614,6 @@ void mem_process_seqs_merge(const mem_opt_t *opt, const bwt_t *bwt, const bntseq
 
     }
 #endif
-	//if(para->nn != pre_nn) {
-	//	for(int i = 0; i < para->nn; i++) {
-	//		shuffle_ids[i] = i;
-	//	}
-	//	shuffle(shuffle_ids, para->nn);
-    //    pre_nn = para->nn;
-	//}
-	para->s_ids = shuffle_ids;
     t_work1_1 += GetTime() - tt0;
 
 

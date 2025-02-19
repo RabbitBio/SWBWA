@@ -18,7 +18,7 @@ AOBJS=		bwashm.o bwase.o bwaseqio.o bwtgap.o bwtaln.o bamlite.o \
 			bwtsw2_chain.o fastmap.o bwtsw2_pair.o
 PROG=		bwa
 INCLUDES=	
-LIBS= -Wl,-q -static -lm -lz -lpthread -lm_slave
+LIBS= -Wl,-q -lm -lz -lpthread -lm_slave
 #-lswperf
 SUBDIRS=	.
 
@@ -41,7 +41,7 @@ endif
 		$(CC) -mhost -fPIC -mieee -mftz -faddress_align=32 -c $(CFLAGS) $(DFLAGS) $(INCLUDES) $(CPPFLAGS) $< -o $@
 
 $(SLAVE_DIR)/%.o: $(SLAVE_DIR)/%.c
-		$(CC) -mslave -msimd -fPIC -mieee -mftz -faddress_align=64 -c $(CFLAGS) $< -o $@
+		$(CC) -mslave -msimd -fPIC -mieee -mftz -faddress_align=64 -c $(CFLAGS) -DUSE_MALLOC_WRAPPERS $< -o $@
 
 
 all:$(PROG)

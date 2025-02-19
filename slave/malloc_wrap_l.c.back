@@ -1,0 +1,129 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#ifdef USE_MALLOC_WRAPPERS
+/* Don't wrap ourselves */
+#  undef USE_MALLOC_WRAPPERS
+#endif
+#include "malloc_wrap.h"
+#include <slave.h>
+
+//#define use_l_malloc
+
+#ifdef use_l_malloc
+
+#define MAX_THREADS 384
+
+char* big_buffer[MAX_THREADS];
+long long now_pos[MAX_THREADS];
+long long tot_size[MAX_THREADS];
+
+void set_big_buffer(char* buffer, long long t_size) {
+    big_buffer[_MYID] = buffer;
+    now_pos[_MYID] = 0;
+    tot_size[_MYID] = t_size;
+    printf("cpe %d set %lld\n", _MYID, tot_size[_MYID]);
+}
+
+void *wrap_malloc(size_t size, const char *file, unsigned int line, const char *func) {
+    if (now_pos[_MYID] + size > tot_size[_MYID]) {
+        printf("ERROR: Out of memory in %s:%u (%s) -- %lld %lld\n", file, line, func, now_pos[_MYID] + size, tot_size[_MYID]);
+        exit(EXIT_FAILURE);
+    }
+    void *ptr = big_buffer[_MYID] + now_pos[_MYID];
+    now_pos[_MYID] += size;
+    return ptr;
+}
+
+void *wrap_calloc(size_t nmemb, size_t size, const char *file, unsigned int line, const char *func) {
+    size_t total_size = nmemb * size;
+    void *ptr = wrap_malloc(total_size, file, line, func);
+    memset(ptr, 0, total_size);
+    return ptr;
+}
+
+void *wrap_realloc(void *ptr, size_t size, const char *file, unsigned int line, const char *func) {
+    void *new_ptr = wrap_malloc(size, file, line, func);
+    if (ptr) {
+        //memcpy(new_ptr, ptr, size / 2);// TODO
+        memcpy(new_ptr, ptr, size);// TODO
+    }
+    return new_ptr;
+}
+
+char *wrap_strdup(const char *s, const char *file, unsigned int line, const char *func) {
+    size_t len = strlen(s) + 1;
+    char *copy = (char *)wrap_malloc(len, file, line, func);
+    strcpy(copy, s);
+    return copy;
+}
+
+void wrap_free(void *ptr, const char *file, unsigned int line, const char *func) {
+    // No-op
+}
+#else
+
+void *wrap_calloc(size_t nmemb, size_t size,
+				  const char *file, unsigned int line, const char *func) {
+	void *p = calloc(nmemb, size);
+	//if (NULL == p) {
+	//	printf(
+	//			"[%s] Failed to allocate %zu bytes at %s line %u: %s\n",
+	//			func, nmemb * size, file, line, strerror(errno));
+	//	exit(EXIT_FAILURE);
+	//}
+	return p;
+}
+
+void *wrap_malloc(size_t size,
+				  const char *file, unsigned int line, const char *func) {
+	void *p = malloc(size);
+	//if (NULL == p) {
+	//	printf(
+	//			"[%s] Failed to allocate %zu bytes at %s line %u: %s\n",
+	//			func, size, file, line, strerror(errno));
+	//	exit(EXIT_FAILURE);
+	//}
+	return p;
+}
+
+void *wrap_realloc(void *ptr, size_t size,
+				   const char *file, unsigned int line, const char *func) {
+    if(_MYID == 0) printf("realloc info %s:%u (%s) -- %d\n", file, line, func, size);
+    void *new_ptr = wrap_malloc(size, file, line, func);
+    if (ptr) {
+        memcpy(new_ptr, ptr, size / 2);// TODO
+    }
+    return new_ptr;
+
+	//void *p = realloc(ptr, size);
+	//if (NULL == p) {
+	//	printf(
+	//			"[%s] Failed to allocate %zu bytes at %s line %u: %s\n",
+	//			func, size, file, line, strerror(errno));
+	//	exit(EXIT_FAILURE);
+	//}
+	//return p;
+}
+
+char *wrap_strdup(const char *s,
+				  const char *file, unsigned int line, const char *func) {
+	char *p = strdup(s);
+	//if (NULL == p) {
+	//	printf(
+	//			"[%s] Failed to allocate %zu bytes at %s line %u: %s\n",
+	//			func, strlen(s), file, line, strerror(errno));
+	//	exit(EXIT_FAILURE);
+	//}
+	return p;
+}
+
+
+void wrap_free(void *ptr,
+		const char *file, unsigned int line, const char *func) {
+	free(ptr);
+}
+
+#endif
+

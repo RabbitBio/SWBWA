@@ -49,6 +49,9 @@ extern unsigned char nst_nt4_table[256];
 
 #define use_cgs_mode
 
+#define cpe_num 384
+extern int cpe_is_over[cpe_num];
+
 //#define use_my_mpi
 
 //#define use_lwpf3
@@ -58,6 +61,8 @@ extern unsigned char nst_nt4_table[256];
 #include "lwpf.h"
 #endif
 
+extern void SLAVE_FUN(state_init());
+extern void SLAVE_FUN(state_print());
 
 double t_malloc = 0;
 double t_free = 0;
@@ -223,6 +228,12 @@ static void update_a(mem_opt_t *opt, const mem_opt_t *opt0)
 		if (!opt0->pen_unpaired) opt->pen_unpaired *= opt->a;
 	}
 }
+
+
+typedef struct{
+    char* big_buffer;
+    long long cpe_buffer_size;
+} Para_malloc;
 
 int main_mem(int argc, char *argv[])
 {
@@ -526,7 +537,6 @@ int main_mem(int argc, char *argv[])
 	}
 	//bwa_print_sam_hdr(aux.idx->bns, hdr_line);
 	aux.actual_chunk_size = fixed_chunk_size > 0? fixed_chunk_size : opt->chunk_size * opt->n_threads;
-    double t0 = GetTime();
 
 #ifdef use_cgs_mode
     athread_init_cgs();
@@ -535,10 +545,20 @@ int main_mem(int argc, char *argv[])
 #endif
 
 
-#ifdef use_swlu
-    swlu_debug_init();
-    swlu_prof_init();
-#endif	
+#define cpe_malloc_tot_size (1ll * 384 * (24ll << 20))
+
+    char* big_buffer = (char*)_sw_xmalloc(cpe_malloc_tot_size);
+    memset(big_buffer, 0, cpe_malloc_tot_size);
+    Para_malloc p_malloc;
+    p_malloc.big_buffer = big_buffer;
+    p_malloc.cpe_buffer_size = cpe_malloc_tot_size / cpe_num;
+#ifdef use_cgs_mode
+    __real_athread_spawn_cgs((void*)slave_state_init, &p_malloc, 1);
+    athread_join_cgs();
+#else
+	__real_athread_spawn((void*)slave_state_init, &p_malloc, 1);
+    athread_join();
+#endif
 
 
 #ifdef use_lwpf3
@@ -546,6 +566,7 @@ int main_mem(int argc, char *argv[])
 #endif
     
 
+    double t0 = GetTime();
     if(no_mt_io) kt_pipeline_single(1, process, &aux, 3);
     else kt_pipeline_queue(3, process, &aux, 3);
 
@@ -567,9 +588,41 @@ int main_mem(int argc, char *argv[])
     fclose(file);
 #endif
 
-#ifdef use_swlu
-    swlu_prof_print();
-#endif	
+    //__real_athread_spawn_cgs((void*)slave_state_print, 0, 1);
+    //athread_join_cgs();
+
+
+
+	//printf("print spwan\n");
+    //for(int i = 0; i < cpe_num; i++) cpe_is_over[i] = 0;
+
+    //for(long cg_id = 0; cg_id < 6; cg_id++) {
+    //    for(long cpe_id = 0; cpe_id < 64; cpe_id++) {
+    //        *((long*)(0x800000008100 + (cg_id << 40ll) + (cpe_id << 24ll))) = 3;
+    //    }
+    //}
+    //for(long cg_id = 0; cg_id < 6; cg_id++) {
+    //    for(long cpe_id = 0; cpe_id < 64; cpe_id++) {
+    //        *((long*)(0x800000008000 + (cg_id << 40ll) + (cpe_id << 24ll))) = slave_state_print;
+    //    }
+    //}
+    //for(long cg_id = 0; cg_id < 6; cg_id++) {
+    //    for(long cpe_id = 0; cpe_id < 64; cpe_id++) {
+    //        *((long*)(0x800000008100 + (cg_id << 40ll) + (cpe_id << 24ll))) = 0;
+    //    }
+    //}
+    //asm volatile("memb\n\t":::);
+
+    //while(1) {
+    //    int sum = 0;
+    //    for(int i = 0; i < cpe_num; i++)
+    //        sum += cpe_is_over[i];
+    //    //printf("mpe sum %d\n", sum);
+    //    if(sum == cpe_num) break;
+    //    sleep(1);
+    //}
+
+    
 
     //athread_halt();
 

@@ -45,6 +45,8 @@
 #include <slave.h>
 #include <crts.h>
 
+#include "../utils.h"
+
 
 #include "lwpf3_my_cpe.h"
 
@@ -1446,15 +1448,15 @@ mem_aln_t mem_reg2aln(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *
 }
 
 typedef struct {
-	const mem_opt_t *opt;
-	const bwt_t *bwt;
-	const bntseq_t *bns;
-	const uint8_t *pac;
-	const mem_pestat_t *pes;
-	smem_aux_t **aux;
-	bseq1_t *seqs;
-	mem_alnreg_v *regs;
-	int64_t n_processed;
+    const mem_opt_t *opt;
+    const bwt_t *bwt;
+    const bntseq_t *bns;
+    const uint8_t *pac;
+    const mem_pestat_t *pes;
+    smem_aux_t **aux;
+    bseq1_t *seqs;
+    mem_alnreg_v *regs;
+    int64_t n_processed;
 } worker_t;
 
 
@@ -1795,6 +1797,203 @@ void worker2_fast(void *data, int i, int tid, int *sam_lens, char **cpe_sams)
 }
 
 
+int neoGetLine(char* buffer, long long *pos, long long tot_len) {
+    long long start_pos = *pos;
+    while (*pos < tot_len) {
+        if (buffer[*pos] == '\n') {
+            (*pos)++;
+            return *pos - start_pos - 1;
+        }
+        (*pos)++;
+    }
+    return (*pos > start_pos) ? (*pos - start_pos) : 0;
+}
+
+__uncached long format_seq_count = 0;
+
+#define use_cgs_mode
+
+int format_seqs(char* buffer, long long buffer_size, char* buffer2, long long buffer_size2, char* tmp_buffer, char* tmp_buffer2, long long tmp_buffer_size, void* data) {
+    if(_MYID == 0) format_seq_count = 0;
+#ifdef use_cgs_mode
+    athread_ssync_array();
+    athread_ssync_node();
+#else
+    athread_ssync_array();
+#endif
+    worker_t *w = (worker_t*)data;
+    int seq_count = 0;
+    long long buffer_pos = 0;
+    long long buffer_pos2 = 0;
+    long long tmp_buffer_pos = 0;
+    long long tmp_buffer_pos2 = 0;
+    bseq1_t seq;
+    bseq1_t seq2;
+
+    //athread_lock(&lock_s);
+    //printf("%d cpe buffer : ", _MYID);
+    //// print the first 10 char of buffer
+    //for(int i = 0; i < (buffer_size < 20 ? buffer_size : 20); i++) {
+    //    printf("%c", buffer[i]);
+    //}
+    //printf("\n");
+    //printf("%d cpe buffer2 : ", _MYID);
+    //// print the first 10 char of buffer2
+    //for(int i = 0; i < (buffer_size2 < 20 ? buffer_size : 20); i++) {
+    //    printf("%c", buffer2[i]);
+    //}
+    //printf("\n");
+    //athread_unlock(&lock_s);
+
+#ifdef use_cgs_mode
+    athread_ssync_array();
+    athread_ssync_node();
+#else
+    athread_ssync_array();
+#endif
+    while (1) {
+        // read1
+        long long pre_pos = buffer_pos;
+        int l_name = neoGetLine(buffer, &buffer_pos, buffer_size);
+        if (l_name == 0) break;
+        char *start = buffer + pre_pos;
+        if (*start == '@') {
+            start++;
+            l_name--;
+        }
+        char *space_pos = strpbrk(start, " \t");
+        if (space_pos) {
+            l_name = space_pos - start;
+        }
+        seq.name = tmp_buffer + tmp_buffer_pos;
+        memcpy(seq.name, start, l_name);
+        seq.name[l_name] = '\0';
+        tmp_buffer_pos += l_name + 1;
+//		long long pre_pos = buffer_pos;
+//        int l_name = neoGetLine(buffer, &buffer_pos, buffer_size);
+//        if (l_name == 0) break;
+//        seq.name = tmp_buffer + tmp_buffer_pos;
+//        memcpy(seq.name, buffer + pre_pos, l_name);
+//        seq.name[l_name] = '\0';
+//        tmp_buffer_pos += l_name + 1;
+
+        pre_pos = buffer_pos;
+        int l_seq = neoGetLine(buffer, &buffer_pos, buffer_size);
+        seq.seq = tmp_buffer + tmp_buffer_pos;
+        seq.l_seq = l_seq;
+        memcpy(seq.seq, buffer + pre_pos, l_seq);
+        seq.seq[l_seq] = '\0';
+        tmp_buffer_pos += l_seq + 1;
+        //athread_lock(&lock_s);
+        //printf("seq.seq: %d %s -- %s\n", l_seq, seq.seq, seq.name);
+        //athread_unlock(&lock_s);
+
+        pre_pos = buffer_pos;
+        int l_comment = neoGetLine(buffer, &buffer_pos, buffer_size);
+        seq.comment = NULL;
+//        seq.comment = tmp_buffer + tmp_buffer_pos;
+//        memcpy(seq.comment, buffer + pre_pos, l_comment);
+//        seq.comment[l_comment] = '\0';
+        tmp_buffer_pos += l_comment + 1;
+
+        pre_pos = buffer_pos;
+        int l_qual = neoGetLine(buffer, &buffer_pos, buffer_size);
+        seq.qual = tmp_buffer + tmp_buffer_pos;
+        memcpy(seq.qual, buffer + pre_pos, l_qual);
+        seq.qual[l_qual] = '\0';
+        tmp_buffer_pos += l_qual + 1;
+
+        seq.sam = NULL;
+
+        //read2
+        pre_pos = buffer_pos2;
+        l_name = neoGetLine(buffer2, &buffer_pos2, buffer_size2);
+        if (l_name == 0) break;
+        char *start2 = buffer2 + pre_pos;
+        if (*start2 == '@') {
+            start2++;
+            l_name--;
+        }
+        char *space_pos2 = strpbrk(start2, " \t");
+        if (space_pos2) {
+            l_name = space_pos2 - start2;
+        }
+        seq2.name = tmp_buffer2 + tmp_buffer_pos2;
+        memcpy(seq2.name, start2, l_name);
+        seq2.name[l_name] = '\0';
+        tmp_buffer_pos2 += l_name + 1;
+//		pre_pos = buffer_pos2;
+//        l_name = neoGetLine(buffer2, &buffer_pos2, buffer_size2);
+//        if (l_name == 0) break;
+//        seq2.name = tmp_buffer2 + tmp_buffer_pos2;
+//        memcpy(seq2.name, buffer2 + pre_pos, l_name);
+//        seq2.name[l_name] = '\0';
+//        tmp_buffer_pos2 += l_name + 1;
+
+
+
+        pre_pos = buffer_pos2;
+        l_seq = neoGetLine(buffer2, &buffer_pos2, buffer_size2);
+        seq2.seq = tmp_buffer2 + tmp_buffer_pos2;
+        seq2.l_seq = l_seq;
+        memcpy(seq2.seq, buffer2 + pre_pos, l_seq);
+        seq2.seq[l_seq] = '\0';
+        tmp_buffer_pos2 += l_seq + 1;
+        //athread_lock(&lock_s);
+        //printf("seq2.seq: %d %s -- %s\n", l_seq, seq2.seq, seq2.name);
+        //athread_unlock(&lock_s);
+
+        pre_pos = buffer_pos2;
+        l_comment = neoGetLine(buffer2, &buffer_pos2, buffer_size2);
+        seq2.comment = NULL;
+//        seq2.comment = tmp_buffer2 + tmp_buffer_pos2;
+//        memcpy(seq2.comment, buffer2 + pre_pos, l_comment);
+//        seq2.comment[l_comment] = '\0';
+        tmp_buffer_pos2 += l_comment + 1;
+
+        pre_pos = buffer_pos2;
+        l_qual = neoGetLine(buffer2, &buffer_pos2, buffer_size2);
+        seq2.qual = tmp_buffer2 + tmp_buffer_pos2;
+        memcpy(seq2.qual, buffer2 + pre_pos, l_qual);
+        seq2.qual[l_qual] = '\0';
+        tmp_buffer_pos2 += l_qual + 1;
+
+        seq2.sam = NULL;
+
+
+        //TODO resize
+        if(tmp_buffer_pos > tmp_buffer_size) printf("GG formart2, over size: %d %d\n", tmp_buffer_pos, tmp_buffer_size);
+        if(tmp_buffer_pos2 > tmp_buffer_size) printf("GG formart3, over size: %d %d\n", tmp_buffer_pos2, tmp_buffer_size);
+        if(buffer_pos > buffer_size) printf("GG formart4, over size: %d %d\n", pre_pos, buffer_size);
+        if(buffer_pos2 > buffer_size2) printf("GG formart5, over size: %d %d\n", pre_pos, buffer_size2);
+
+        asm volatile("faal %0, 0(%1)\n\t"
+                : "=r"(seq_count)
+                : "r"(&format_seq_count)
+                : "memory");
+        if(seq_count >= 1000000) printf("GG formart1, over size: %d %d\n", seq_count, 1000000);
+
+        w->seqs[seq_count<<1] = seq;
+        w->seqs[seq_count<<1|1] = seq2;
+    }
+#ifdef use_cgs_mode
+    athread_ssync_array();
+    athread_ssync_node();
+#else
+    athread_ssync_array();
+#endif
+
+    //printf("cpe %d done\n", _MYID);
+    //if(_MYID == 0) {
+    //    for(int i = 0; i < (format_seq_count << 1); i++) {
+    //        printf("seq: %d %s -- %s\n", w->seqs[i].l_seq, w->seqs[i].seq, w->seqs[i].name);
+    //        printf("i:%d %s\n%s\n%s\n%s\n", i, w->seqs[i].name, w->seqs[i].seq, w->seqs[i].comment, w->seqs[i].qual);
+    //        printf("\n");
+    //    }
+    //}
+    return format_seq_count;
+}
+
 void worker12_pre_fast(void *data, int l_pos, int r_pos, int tid, int *sam_lens, char **cpe_sams, const mem_pestat_t *pes0, int* s_ids)
 {
     extern int mem_sam_pe(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, const mem_pestat_t pes[4], uint64_t id, bseq1_t s[2], mem_alnreg_v a[2]);
@@ -1809,6 +2008,10 @@ void worker12_pre_fast(void *data, int l_pos, int r_pos, int tid, int *sam_lens,
         for(int sid = l_pos; sid < r_pos; sid++) {
             //int i = s_ids[sid];
             int i = sid;
+//            if(_MYID == 0) {
+//                printf("get read %d\n", i<<1|0);
+//                printf("get read %s %s\n", w->seqs[i<<1|0].name, w->seqs[i<<1|0].seq);
+//            }
             w->regs[i<<1|0] = mem_align1_core(i * 2, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|0].l_seq, w->seqs[i<<1|0].seq, w->aux[tid]);
             w->regs[i<<1|1] = mem_align1_core(i * 2 + 1, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|1].l_seq, w->seqs[i<<1|1].seq, w->aux[tid]);
         }
@@ -1830,6 +2033,7 @@ void worker12_pre_fast(void *data, int l_pos, int r_pos, int tid, int *sam_lens,
         fprintf("stderr", "TODO and test\n");
         exit(0);
     } else {
+//        printf("range [%d, %d]\n", l_pos, r_pos);
         for(int sid = l_pos; sid < r_pos; sid++) {
             //int i = s_ids[sid];
             int i = sid;
@@ -1837,6 +2041,11 @@ void worker12_pre_fast(void *data, int l_pos, int r_pos, int tid, int *sam_lens,
             for (int id = 0; id < 2; id++) {
                 tmp_seq[id] = w->seqs[i<<1|id];
             }
+//            printf("rid %d\n", i);
+//            printf("name %s %s\n", w->seqs[i<<1|0].name, w->seqs[i<<1|1].name);
+//            printf("seq %s %s\n", w->seqs[i<<1|0].seq, w->seqs[i<<1|1].seq);
+//            printf("comment %s %s\n", w->seqs[i<<1|0].comment, w->seqs[i<<1|1].comment);
+//            printf("qual %s %s\n", w->seqs[i<<1|0].qual, w->seqs[i<<1|1].qual);
 //            mem_sam_pe(w->opt, w->bns, w->pac, w->pes, (w->n_processed>>1) + i, &w->seqs[i<<1], &w->regs[i<<1]);
             mem_sam_pe(w->opt, w->bns, w->pac, pes, (w->n_processed>>1) + i, tmp_seq, &w->regs[i<<1]);
             free(w->regs[i<<1|0].a); free(w->regs[i<<1|1].a);
@@ -1845,6 +2054,8 @@ void worker12_pre_fast(void *data, int l_pos, int r_pos, int tid, int *sam_lens,
                 cpe_sams[i<<1|id] = tmp_seq[id].sam;
                 sam_lens[i<<1|id] = cpe_sam_len;
             }
+//            printf("rid11 %d, sam len %d %d\n", i, sam_lens[i<<1|0], sam_lens[i<<1|1]);
+//            printf("sam11 %s%s\n", cpe_sams[i<<1|0], cpe_sams[i<<1|1]);
         }
     }
     lwpf_stop(l_worker2_1);
@@ -1860,11 +2071,15 @@ void worker12_fast(void *data, int l_pos, int r_pos, int tid, int *sam_lens, cha
         for(int sid = l_pos; sid < r_pos; sid++) {
             //int i = s_ids[sid];
             int i = sid;
+//            printf("rid22 %d, sam len %d %d\n", i, sam_lens[i<<1|0], sam_lens[i<<1|1]);
+//            printf("sam22 %s%s\n", cpe_sams[i<<1|0], cpe_sams[i<<1|1]);
             for(int id = 0; id < 2; id++) {
                 memcpy(w->seqs[i<<1|id].sam, cpe_sams[i<<1|id], sam_lens[i<<1|id] * sizeof(char));
                 w->seqs[i<<1|id].sam[sam_lens[i<<1|id]] = '\0';
                 if(cpe_sams[i<<1|id]) free(cpe_sams[i<<1|id]);
             }
+//            printf("rid33 %d, sam len %d %d\n", i, sam_lens[i<<1|0], sam_lens[i<<1|1]);
+//            printf("sam33 %s%s\n", w->seqs[i<<1|0].sam, w->seqs[i<<1|1].sam);
         }
     }
 }

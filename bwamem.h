@@ -169,6 +169,8 @@ extern "C" {
 
     void mem_process_seqs_merge(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bns, const uint8_t *pac, int64_t n_processed, int n, bseq1_t *seqs, const mem_pestat_t *pes0);
 
+    void mem_process_seqs_merge2(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bns, const uint8_t *pac, int64_t n_processed, int *n2, bseq1_t **seqs,
+                             char* block_buffer, char* block_buffer2, long long block_size, long long block_size2, const mem_pestat_t *pes0);
 	/**
 	 * Find the aligned regions for one query sequence
 	 *

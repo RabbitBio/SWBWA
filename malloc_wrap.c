@@ -519,9 +519,7 @@ int bindLength[lengthNum] = {1 << 4, 1 << 5, 1 << 6, 1 << 7, 1 << 8, 1 << 9, 1 <
 #ifdef use_std_malloc
 int initListsSize[lengthNum] = {8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8};
 #else
-int initListsSize[lengthNum] = {8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8192};
-//int initListsSize[lengthNum] = {8, 8, 8, 8, 8, 1048576, 8192, 8, 8, 8, 8, 8, 8};
-//static int initListsSize[lengthNum] = {512,65536,8192,4096,4096,16384,2048,1024,4096,2048,256,1024,1024};
+int initListsSize[lengthNum] = {8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8};
 #endif
 
 int hasInit = 0;
@@ -667,7 +665,7 @@ void *mannual_malloc(size_t size) {
 
     // The trees that are already occupied, open a new one
     if (find_pos == -1) {
-        printf("GG no node\n");
+//        printf("GG no node\n");
         struct segTree *now_tree = buildSetTree(bindLength[length_type], nextListsSize[length_type]);
         nextListsSize[length_type] = nextListsSize[length_type] << 1;
         lists[length_type][listsSize[length_type]++] = now_tree;

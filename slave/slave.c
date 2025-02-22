@@ -25,6 +25,16 @@ typedef struct{
     unsigned long *tls_content;
     char* big_buffer;
     long long cpe_buffer_size;
+
+    // for cpe format
+    char* block_buffer;
+    char* block_buffer2;
+    char* tmp_block_buffer;
+    char* tmp_block_buffer2;
+    long long block_size;
+    long long block_size2;
+    long long tmp_block_size;
+    long nns[384];
 } Para_worker12_s;
 
 typedef struct{
@@ -397,7 +407,93 @@ void worker2_s_fast_cross() {
 
 }
 
+void SkipToLineEnd(char *data_, long long *pos_, const long long size_) {
+    while (*pos_ < size_ && data_[*pos_] != '\n') {
+        ++(*pos_);
+    }
+}
 
+
+int64_t GetNextFastq(char *data_, long long pos_, const long long size_) {
+    if(pos_ < 0) pos_ = 0;
+    SkipToLineEnd(data_, &pos_, size_);
+    ++pos_;
+
+    // find beginning of the next record
+    while (data_[pos_] != '@') {
+        SkipToLineEnd(data_, &pos_, size_);
+        ++pos_;
+    }
+    int64_t pos0 = pos_;
+
+    SkipToLineEnd(data_, &pos_, size_);
+    ++pos_;
+
+    if (data_[pos_] == '@')// previous one was a quality field
+        return pos_;
+    //-----[haoz:] is the following code necessary??-------------//
+    SkipToLineEnd(data_, &pos_, size_);
+    ++pos_;
+    if (data_[pos_] != '+') printf("cpe GetNextFastq core dump is pos: %d\n", pos_);
+    assert(data_[pos_] == '+');// pos0 was the start of tag
+    return pos0;
+}
+
+void cpe_format_pre_cross() {
+    asm volatile("mov %0, $29\n\t"::"r"(pp_slave->new_gp):);
+
+    unsigned long init_csr_value = 0;
+    asm volatile("rcsr %0, 0xc4" : "=r"(init_csr_value));
+    if(init_csr_value < 0x500000000000) {
+        //if(0) {
+        unsigned long new_csr_value = pp_slave->priv_addr + csr_copy_size * _MYID + init_csr_value - private_start;
+        if(_MYID == 0) {
+            printf("init_csr_value %p\n", (void*)init_csr_value);
+            //for(int i = 0; i < 16; i++) {
+            //    printf("%lx %lx\n", *(unsigned long*)(init_csr_value + i * 8), *(unsigned long*)(new_csr_value + i * 8));
+            //}
+        }
+        asm volatile("wcsr %0, 0xc4\n\t"::"r"(new_csr_value):);
+    }
+
+    Para_worker12_s *para = pp_slave;
+    int tot_seq_num = 0;
+    if(para->block_size < cpe_num_slave * (1 << 10)) {
+        //if(1) {
+        if(global_pen == 0) {
+            tot_seq_num = format_seqs(para->block_buffer, para->block_size, para->block_buffer2, para->block_size,
+                                      para->tmp_block_buffer, para->tmp_block_buffer2, 512 << 20, para->data);
+        } else {
+            tot_seq_num = format_seqs(NULL, 0, NULL, 0,
+                                      NULL, NULL, 0, para->data);
+        }
+    } else {
+        //printf("block is big enough\n");
+        long long pre_cpe_buffer_size = ceil(1.0 * para->block_size / cpe_num_slave);
+        long long l_pos = global_pen * pre_cpe_buffer_size;
+        long long r_pos = l_pos + pre_cpe_buffer_size;
+        if(r_pos > para->block_size) r_pos = para->block_size;
+        long long real_r_pos;
+        if(global_pen == cpe_num_slave - 1) real_r_pos = r_pos;
+        else real_r_pos = GetNextFastq(para->block_buffer, r_pos - (1 << 10), para->block_size);
+        long long real_l_pos;
+        if(global_pen == 0) real_l_pos = 0;
+        else real_l_pos = GetNextFastq(para->block_buffer, l_pos - (1 << 10), para->block_size);
+        //TODO get pos of buffer2
+
+        long long pre_cpe_tmp_buffer_size = ceil(1.0 * para->tmp_block_size / cpe_num_slave);
+        long long l_pos2 = global_pen * pre_cpe_tmp_buffer_size;
+        long long r_pos2 = l_pos2 + pre_cpe_tmp_buffer_size;
+        if(r_pos2 > para->tmp_block_size) r_pos2 = para->tmp_block_size;
+        tot_seq_num = format_seqs(para->block_buffer + real_l_pos, real_r_pos - real_l_pos, para->block_buffer2 + real_l_pos, real_r_pos - real_l_pos,
+                                  para->tmp_block_buffer + l_pos2, para->tmp_block_buffer2 + l_pos2, r_pos2 - l_pos2, para->data);
+
+    }
+    para->nns[global_pen] = tot_seq_num;
+    pp_slave->tag[global_pen] = 1;
+    flush_slave_cache();
+    while(1);
+}
 
 void worker12_s_pre_fast_cross() {
     asm volatile("mov %0, $29\n\t"::"r"(pp_slave->new_gp):);
@@ -415,9 +511,6 @@ void worker12_s_pre_fast_cross() {
         }
         asm volatile("wcsr %0, 0xc4\n\t"::"r"(new_csr_value):);
     }
-
-    //printf("cpe set buffer %p %lld\n", pp_slave->big_buffer, pp_slave->cpe_buffer_size);
-    //set_big_buffer(pp_slave->big_buffer, pp_slave->cpe_buffer_size);
 
     Para_worker12_s *para = pp_slave;
     lwpf_enter(TEST);
@@ -608,6 +701,49 @@ void worker2_s_fast(Para_worker12_s *para) {
 
 }
 
+void cpe_format_pre(Para_worker12_s *para) {
+    int tot_seq_num = 0;
+    if(para->block_size < cpe_num_slave * (1 << 10)) {
+    //if(1) {
+        if(global_pen == 0) {
+            tot_seq_num = format_seqs(para->block_buffer, para->block_size, para->block_buffer2, para->block_size,
+                                      para->tmp_block_buffer, para->tmp_block_buffer2, 512 << 20, para->data);
+        } else {
+            tot_seq_num = format_seqs(NULL, 0, NULL, 0,
+                                      NULL, NULL, 0, para->data);
+        }
+    } else {
+        //printf("block is big enough\n");
+        long long pre_cpe_buffer_size = ceil(1.0 * para->block_size / cpe_num_slave);
+        long long l_pos = global_pen * pre_cpe_buffer_size;
+        long long r_pos = l_pos + pre_cpe_buffer_size;
+        if(r_pos > para->block_size) r_pos = para->block_size;
+        long long real_r_pos;
+        if(global_pen == cpe_num_slave - 1) real_r_pos = r_pos;
+        else real_r_pos = GetNextFastq(para->block_buffer, r_pos - (1 << 10), para->block_size);
+        long long real_l_pos;
+        if(global_pen == 0) real_l_pos = 0;
+        else real_l_pos = GetNextFastq(para->block_buffer, l_pos - (1 << 10), para->block_size);
+        //TODO get pos of buffer2
+
+        long long pre_cpe_tmp_buffer_size = ceil(1.0 * para->tmp_block_size / cpe_num_slave);
+        long long l_pos2 = global_pen * pre_cpe_tmp_buffer_size;
+        long long r_pos2 = l_pos2 + pre_cpe_tmp_buffer_size;
+        if(r_pos2 > para->tmp_block_size) r_pos2 = para->tmp_block_size;
+        tot_seq_num = format_seqs(para->block_buffer + real_l_pos, real_r_pos - real_l_pos, para->block_buffer2 + real_l_pos, real_r_pos - real_l_pos,
+                                  para->tmp_block_buffer + l_pos2, para->tmp_block_buffer2 + l_pos2, r_pos2 - l_pos2, para->data);
+
+    }
+
+    //if(global_pen == 0) {
+    //    para->nn = tot_seq_num;
+    //}
+    para->nns[global_pen] = tot_seq_num;
+    //athread_lock(&lock_s);
+    //printf("cpe %d, seq num %d\n", global_pen, tot_seq_num);
+    //athread_unlock(&lock_s);
+//    exit(0);
+}
 
 
 void worker12_s_pre_fast(Para_worker12_s *para) {

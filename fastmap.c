@@ -47,11 +47,13 @@ KSEQ_DECLARE(int)
 extern unsigned char nst_nt4_table[256];
 
 
-#define use_cgs_mode
 
 #define cpe_num 384
 extern int cpe_is_over[cpe_num];
 
+
+#define use_cgs_mode
+#define use_cpe_step0
 //#define use_my_mpi
 
 //#define use_lwpf3
@@ -124,7 +126,50 @@ typedef struct {
 	ktp_aux_t *aux;
 	int n_seqs;
 	bseq1_t *seqs;
+    char* block_buffer;
+    char* block_buffer2;
+    long long block_size;
+    long long block_size2;
 } ktp_data_t;
+
+void SkipToLineEnd(char *data_, long long *pos_, const long long size_) {
+    while (*pos_ < size_ && data_[*pos_] != '\n') {
+        ++(*pos_);
+    }
+}
+
+int64_t GetNextFastq(char *data_, long long pos_, const long long size_) {
+    if(pos_ < 0) pos_ = 0;
+    SkipToLineEnd(data_, &pos_, size_);
+    ++pos_;
+
+    // find beginning of the next record
+    while (data_[pos_] != '@') {
+        SkipToLineEnd(data_, &pos_, size_);
+        ++pos_;
+    }
+    int64_t pos0 = pos_;
+
+    SkipToLineEnd(data_, &pos_, size_);
+    ++pos_;
+
+    if (data_[pos_] == '@')// previous one was a quality field
+        return pos_;
+    //-----[haoz:] is the following code necessary??-------------//
+    SkipToLineEnd(data_, &pos_, size_);
+    ++pos_;
+    if (data_[pos_] != '+') printf("GetNextFastq core dump is pos: %d\n",  pos_);
+    assert(data_[pos_] == '+');// pos0 was the start of tag
+    return pos0;
+}
+
+#define pre_cpe_read_num 1024
+
+#define eval_read_size 300
+
+
+FILE *file1_ptr;
+FILE *file2_ptr;
 
 static void *process(void *shared, int step, void *_data)
 {
@@ -133,6 +178,68 @@ static void *process(void *shared, int step, void *_data)
 	int i;
 	if (step == 0) {
         double t0 = GetTime();
+#ifdef use_cpe_step0
+        static long long now_file1_pos = 0;
+        static long long now_file2_pos = 0;
+        static long long tot_block_size = cpe_num * pre_cpe_read_num * eval_read_size;
+        static long long block_size = pre_cpe_read_num * eval_read_size;
+        char* block_buffer = (char*)malloc(tot_block_size + 1024);
+        char* block_buffer2 = (char*)malloc(tot_block_size + 1024);
+        ktp_data_t *ret;
+        ret = calloc(1, sizeof(ktp_data_t));
+        if (bwa_verbose >= 3)
+            fprintf(stderr, "[M::%s] read block (%ld)...\n", __func__, tot_block_size);
+
+//        printf("file ptr %p %p\n", file1_ptr, file2_ptr);
+//        printf("seek pos %lld %lld\n", now_file1_pos, now_file2_pos);
+        fseek(file1_ptr, now_file1_pos, SEEK_SET);
+        long long read_size = fread(block_buffer, 1, tot_block_size, file1_ptr);
+//        printf("read size1 : %lld\n", read_size);
+        long long real_size;
+        if(read_size != tot_block_size) {
+            real_size = read_size;
+        } else {
+            real_size = GetNextFastq(block_buffer, read_size - (1 << 10), read_size);
+        }
+        now_file1_pos += real_size;
+//        printf("file1 read size %lld, real size %lld\n", read_size, real_size);
+
+        fseek(file2_ptr, now_file2_pos, SEEK_SET);
+        long long read_size2 = fread(block_buffer2, 1, tot_block_size, file2_ptr);
+//        printf("read size2 : %lld\n", read_size2);
+        long long real_size2;
+        if(read_size2 != tot_block_size) {
+            real_size2 = read_size2;
+        } else {
+            real_size2 = GetNextFastq(block_buffer2, read_size2 - (1 << 10), read_size2);
+        }
+        now_file2_pos += real_size2;
+//        printf("file2 read size %lld, real size %lld\n", read_size2, real_size2);
+
+        assert(real_size == real_size2);
+        if(real_size == 0) {
+            free(block_buffer);
+            free(block_buffer2);
+            free(ret);
+            return 0;
+        }
+        ret->block_buffer = block_buffer;
+        ret->block_buffer2 = block_buffer2;
+        ret->block_size = real_size;
+        ret->block_size2 = real_size2;
+        // print the first 10 char in buffer
+        printf("buffer1 : ");
+        for(int i = 0; i < 10; i++) {
+            printf("%c", block_buffer[i]);
+        }
+        printf("\n");
+        printf("buffer2 : ");
+        for(int i = 0; i < 10; i++) {
+            printf("%c", block_buffer2[i]);
+        }
+        printf("\n");
+
+#else
 		ktp_data_t *ret;
 		int64_t size = 0;
 		ret = calloc(1, sizeof(ktp_data_t));
@@ -152,6 +259,7 @@ static void *process(void *shared, int step, void *_data)
 		for (i = 0; i < ret->n_seqs; ++i) size += ret->seqs[i].l_seq;
 		if (bwa_verbose >= 3)
 			fprintf(stderr, "[M::%s] read %d sequences (%ld bp)...\n", __func__, ret->n_seqs, (long)size);
+#endif
         t_step1 += GetTime() - t0;
 		return ret;
 	} else if (step == 1) {
@@ -159,28 +267,17 @@ static void *process(void *shared, int step, void *_data)
 		const mem_opt_t *opt = aux->opt;
 		const bwaidx_t *idx = aux->idx;
 		if (opt->flag & MEM_F_SMARTPE) {
-			bseq1_t *sep[2];
-			int n_sep[2];
-			mem_opt_t tmp_opt = *opt;
-			bseq_classify(data->n_seqs, data->seqs, n_sep, sep);
-			if (bwa_verbose >= 3)
-				fprintf(stderr, "[M::%s] %d single-end sequences; %d paired-end sequences\n", __func__, n_sep[0], n_sep[1]);
-			if (n_sep[0]) {
-				tmp_opt.flag &= ~MEM_F_PE;
-				mem_process_seqs(&tmp_opt, idx->bwt, idx->bns, idx->pac, aux->n_processed, n_sep[0], sep[0], 0);
-				for (i = 0; i < n_sep[0]; ++i)
-					data->seqs[sep[0][i].id].sam = sep[0][i].sam;
-			}
-			if (n_sep[1]) {
-				tmp_opt.flag |= MEM_F_PE;
-				mem_process_seqs(&tmp_opt, idx->bwt, idx->bns, idx->pac, aux->n_processed + n_sep[0], n_sep[1], sep[1], aux->pes0);
-				for (i = 0; i < n_sep[1]; ++i)
-					data->seqs[sep[1][i].id].sam = sep[1][i].sam;
-			}
-			free(sep[0]); free(sep[1]);
+			//TODO
+            assert(0);
 		} else {
-            //mem_process_seqs(opt, idx->bwt, idx->bns, idx->pac, aux->n_processed, data->n_seqs, data->seqs, aux->pes0);
+
+#ifdef use_cpe_step0
+            mem_process_seqs_merge2(opt, idx->bwt, idx->bns, idx->pac, aux->n_processed, &(data->n_seqs), &(data->seqs), data->block_buffer, data->block_buffer2, data->block_size, data->block_size2, aux->pes0);
+#else
             mem_process_seqs_merge(opt, idx->bwt, idx->bns, idx->pac, aux->n_processed, data->n_seqs, data->seqs, aux->pes0);
+//            mem_process_seqs(opt, idx->bwt, idx->bns, idx->pac, aux->n_processed, data->n_seqs, data->seqs, aux->pes0);
+#endif
+//            printf("now data->n_seqs %d\n", data->n_seqs);
         }
 		aux->n_processed += data->n_seqs;
         t_step2 += GetTime() - t0;
@@ -192,18 +289,23 @@ static void *process(void *shared, int step, void *_data)
             //if(file_out_fd != 0) {
             double t1 = GetTime();
             //if (data->seqs[i].sam) err_fputs(data->seqs[i].sam, file_out_sam);
+//            printf("sam %p\n", data->seqs[i].sam);
             if (data->seqs[i].sam) my_align_write(data->seqs[i].sam, file_out_fd, 0);
             t_step3_1 += GetTime() - t1;
             //}
 			//if (data->seqs[i].sam) err_fputs(data->seqs[i].sam, stdout);
+#ifdef use_cpe_step0
+#else
 			free(data->seqs[i].name); free(data->seqs[i].comment);
 			free(data->seqs[i].seq); free(data->seqs[i].qual);
-			if (data->seqs[i].is_new_addr == 1) {
-				//wrap_free(data->seqs[i].sam);
+            if (data->seqs[i].is_new_addr == 1) {
+//				wrap_free(data->seqs[i].sam);
 				free(data->seqs[i].sam);
 			}
-            //free(data->seqs[i].sam);
+#endif
+//            free(data->seqs[i].sam);
 		}
+//        printf("free seqs %p\n", data->seqs);
 		free(data->seqs); free(data);
         t_step3 += GetTime() - t0;
 		return 0;
@@ -243,7 +345,8 @@ int main_mem(int argc, char *argv[])
     MPI_Comm_rank(MPI_COMM_WORLD, &local_my_rank);
 #endif
 	mem_opt_t *opt, opt0;
-	int fd, fd2, i, c, ignore_alt = 0, no_mt_io = 0;
+	int fd, fd2;
+    int i, c, ignore_alt = 0, no_mt_io = 0;
 	int fixed_chunk_size = -1;
 	//gzFile fp, fp2 = 0;
 	char *p, *rg_line = 0, *hdr_line = 0;
@@ -500,8 +603,10 @@ int main_mem(int argc, char *argv[])
     char in_filename1[256];
     sprintf(in_filename1, "%s_%d", argv[optind + 1], in_rank);
     fprintf(stderr, "the input file1 is %s\n", in_filename1);
+    file1_ptr = fopen(in_filename1, "r");
 	ko = kopen(in_filename1, &fd);
 #else
+    file1_ptr = fopen(argv[optind + 1], "r");
 	ko = kopen(argv[optind + 1], &fd);
 #endif
     
@@ -521,8 +626,10 @@ int main_mem(int argc, char *argv[])
             char in_filename2[256];
             sprintf(in_filename2, "%s_%d", argv[optind + 2], in_rank);
             fprintf(stderr, "the input file2 is %s\n", in_filename2);
+            file2_ptr = fopen(in_filename2, "r");
             ko2 = kopen(in_filename2, &fd2);
 #else
+            file2_ptr = fopen(argv[optind + 2], "r");
             ko2 = kopen(argv[optind + 2], &fd2);
 #endif
 			if (ko2 == 0) {
@@ -547,29 +654,28 @@ int main_mem(int argc, char *argv[])
 
 #define cpe_malloc_tot_size (1ll * 384 * (24ll << 20))
 
+#ifdef use_cgs_mode
     char* big_buffer = (char*)_sw_xmalloc(cpe_malloc_tot_size);
     memset(big_buffer, 0, cpe_malloc_tot_size);
     Para_malloc p_malloc;
     p_malloc.big_buffer = big_buffer;
     p_malloc.cpe_buffer_size = cpe_malloc_tot_size / cpe_num;
-#ifdef use_cgs_mode
     __real_athread_spawn_cgs((void*)slave_state_init, &p_malloc, 1);
     athread_join_cgs();
-#else
-	__real_athread_spawn((void*)slave_state_init, &p_malloc, 1);
-    athread_join();
 #endif
 
 
 #ifdef use_lwpf3
     lwpf_init(NULL);
 #endif
-    
+
+//    htmalloccount_init();
 
     double t0 = GetTime();
     if(no_mt_io) kt_pipeline_single(1, process, &aux, 3);
     else kt_pipeline_queue(3, process, &aux, 3);
 
+//    htmalloccount_print();
 
 #ifdef use_lwpf3
     char filename[50];

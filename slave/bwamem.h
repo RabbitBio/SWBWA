@@ -136,6 +136,7 @@ extern "C" {
 #endif
 
     void occ_bench(void *data);
+    int format_seqs(char* buffer, long long buffer_size, char* buffer2, long long buffer_size2, char* tmp_buffer, char* tmp_buffer2, long long tmp_buffer_size, void* data);
     void worker1_pre_fast(void *data, int i, int tid, mem_alnreg_v* cpe_regs);
     void worker1_fast(void *data, int i, int tid, mem_alnreg_v* cpe_regs);
     void worker2_pre_fast(void *data, int i, int tid, int *sam_lens, char **cpe_sams);

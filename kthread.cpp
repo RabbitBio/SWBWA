@@ -184,7 +184,6 @@ void reader_thread(ktp_t* p, MyQueue& queue, std::atomic<bool>& done_reading) {
     //set_thread_affinity(1);
     DataType data = nullptr;
     while (true) {
-
         {
             //std::lock_guard<std::mutex> lock(mtx);
             data = p->func(p->shared, 0, nullptr);

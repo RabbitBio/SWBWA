@@ -164,7 +164,7 @@ def process_got(elf):
     if '.rela.text1' in elf.shdrs:
         rela_text1_offset = elf.shdrs['.rela.text1'].sh_offset
         rela_text1_size = elf.shdrs['.rela.text1'].sh_size
-
+        # find all literal type relocations and their addresses in .text1 section
         for i in range(rela_text1_offset, rela_text1_offset + rela_text1_size, 24):
             addr, info, off = struct.unpack("<QQQ", elf.bin[i : i + 24])
             reltype = SW9Rel(info & 63)
@@ -174,6 +174,7 @@ def process_got(elf):
 
     #got_addrs = {}
     addrs = []
+    # filter out ldl ldi instructions and save the corresponding address
     for liter in liters:
         faddr = liter - text1_addr + text1_offset
         inst = struct.unpack('<I', elf.bin[faddr : faddr + 4])[0]

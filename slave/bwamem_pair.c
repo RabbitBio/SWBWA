@@ -296,7 +296,16 @@ int mem_pair(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, cons
                     q = 0;
                 } else {
                     ns = (dist - pes[dir].avg) / pes[dir].std;
-                    q = (int)((v.a[i].y>>32) + (v.a[k].y>>32) + .721 * log(2. * erfc(fabs(ns) * M_SQRT1_2)) * opt->a + .499); // .721 = 1/log(4)
+//                    double log_val, result;
+//                    double erfc_val = erfc(fabs(ns) * M_SQRT1_2);
+//                    double tmp = 2.0 * erfc_val;
+//                    if (tmp <= 0.0) tmp = 1e-10;
+//                    log_val = log(tmp);
+//                    result = (v.a[i].y >> 32) + (v.a[k].y >> 32) + 0.721 * log_val * opt->a + 0.499;
+//                    if (result > INT_MAX) result = INT_MAX;
+//                    if (result < INT_MIN) result = INT_MIN;
+//                    q = (int)llround(result);
+                    q = (int)((v.a[i].y >> 32) + (v.a[k].y >> 32) + .721 * log(2. * erfc(fabs(ns) * M_SQRT1_2)) * opt->a + 0.499); // .721 = 1/log(4)
                 }
                 if (q < 0) q = 0;
 				p = kv_pushp(pair64_t, u);

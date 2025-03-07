@@ -53,7 +53,7 @@ extern int cpe_is_over[cpe_num];
 
 
 #define use_cgs_mode
-#define use_cpe_step0
+//#define use_cpe_step0
 //#define use_my_mpi
 
 //#define use_lwpf3
@@ -228,16 +228,16 @@ static void *process(void *shared, int step, void *_data)
         ret->block_size = real_size;
         ret->block_size2 = real_size2;
         // print the first 10 char in buffer
-        printf("buffer1 : ");
-        for(int i = 0; i < 10; i++) {
-            printf("%c", block_buffer[i]);
-        }
-        printf("\n");
-        printf("buffer2 : ");
-        for(int i = 0; i < 10; i++) {
-            printf("%c", block_buffer2[i]);
-        }
-        printf("\n");
+//        printf("buffer1 : ");
+//        for(int i = 0; i < 10; i++) {
+//            printf("%c", block_buffer[i]);
+//        }
+//        printf("\n");
+//        printf("buffer2 : ");
+//        for(int i = 0; i < 10; i++) {
+//            printf("%c", block_buffer2[i]);
+//        }
+//        printf("\n");
 
 #else
 		ktp_data_t *ret;

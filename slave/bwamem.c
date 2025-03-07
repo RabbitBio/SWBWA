@@ -167,27 +167,27 @@ static smem_aux_t *smem_aux_init()
 {
 	smem_aux_t *a;
     //init version
-	//a = calloc(1, sizeof(smem_aux_t));
-	//a->tmpv[0] = calloc(1, sizeof(bwtintv_v));
-	//a->tmpv[1] = calloc(1, sizeof(bwtintv_v));
+	a = calloc(1, sizeof(smem_aux_t));
+	a->tmpv[0] = calloc(1, sizeof(bwtintv_v));
+	a->tmpv[1] = calloc(1, sizeof(bwtintv_v));
 
 
     //ldm malloc version
-	a = ldm_malloc(sizeof(smem_aux_t));
-	a->tmpv[0] = ldm_malloc(sizeof(bwtintv_v));
-	a->tmpv[1] = ldm_malloc(sizeof(bwtintv_v));
-    a->tmpv[0]->n = 0;
-    a->tmpv[0]->m = ldm_malloc_tmp_size1;
-    a->tmpv[0]->a = ldm_malloc(ldm_malloc_tmp_size1 * sizeof(bwtintv_t));
-    a->tmpv[1]->n = 0;
-    a->tmpv[1]->m = ldm_malloc_tmp_size1;
-    a->tmpv[1]->a = ldm_malloc(ldm_malloc_tmp_size1 * sizeof(bwtintv_t));
-    a->mem.n = 0;
-    a->mem.m = ldm_malloc_tmp_size2;
-    a->mem.a = ldm_malloc(ldm_malloc_tmp_size2 * sizeof(bwtintv_t));
-    a->mem1.n = 0;
-    a->mem1.m = ldm_malloc_tmp_size2;
-    a->mem1.a = ldm_malloc(ldm_malloc_tmp_size2 * sizeof(bwtintv_t));
+//	a = ldm_malloc(sizeof(smem_aux_t));
+//	a->tmpv[0] = ldm_malloc(sizeof(bwtintv_v));
+//	a->tmpv[1] = ldm_malloc(sizeof(bwtintv_v));
+//    a->tmpv[0]->n = 0;
+//    a->tmpv[0]->m = ldm_malloc_tmp_size1;
+//    a->tmpv[0]->a = ldm_malloc(ldm_malloc_tmp_size1 * sizeof(bwtintv_t));
+//    a->tmpv[1]->n = 0;
+//    a->tmpv[1]->m = ldm_malloc_tmp_size1;
+//    a->tmpv[1]->a = ldm_malloc(ldm_malloc_tmp_size1 * sizeof(bwtintv_t));
+//    a->mem.n = 0;
+//    a->mem.m = ldm_malloc_tmp_size2;
+//    a->mem.a = ldm_malloc(ldm_malloc_tmp_size2 * sizeof(bwtintv_t));
+//    a->mem1.n = 0;
+//    a->mem1.m = ldm_malloc_tmp_size2;
+//    a->mem1.a = ldm_malloc(ldm_malloc_tmp_size2 * sizeof(bwtintv_t));
 
 
     //global fix version
@@ -213,21 +213,21 @@ static smem_aux_t *smem_aux_init()
 static void smem_aux_destroy(smem_aux_t *a)
 {	
     //init version
-    //free(a->tmpv[0]->a);
-    //free(a->tmpv[0]);
-	//free(a->tmpv[1]->a);
-    //free(a->tmpv[1]);
-	//free(a->mem.a); free(a->mem1.a);
-	//free(a);
+    free(a->tmpv[0]->a);
+    free(a->tmpv[0]);
+	free(a->tmpv[1]->a);
+    free(a->tmpv[1]);
+	free(a->mem.a); free(a->mem1.a);
+	free(a);
 
     //ldm free version
-    ldm_free(a->tmpv[0]->a, ldm_malloc_tmp_size1 * sizeof(bwtintv_t));
-    ldm_free(a->tmpv[0], sizeof(bwtintv_v));
-	ldm_free(a->tmpv[1]->a, ldm_malloc_tmp_size1 * sizeof(bwtintv_t));
-    ldm_free(a->tmpv[1], sizeof(bwtintv_v));
-	ldm_free(a->mem.a, ldm_malloc_tmp_size2 * sizeof(bwtintv_t));
-    ldm_free(a->mem1.a, ldm_malloc_tmp_size2 * sizeof(bwtintv_t));
-	ldm_free(a, sizeof(smem_aux_t));
+//    ldm_free(a->tmpv[0]->a, ldm_malloc_tmp_size1 * sizeof(bwtintv_t));
+//    ldm_free(a->tmpv[0], sizeof(bwtintv_v));
+//	ldm_free(a->tmpv[1]->a, ldm_malloc_tmp_size1 * sizeof(bwtintv_t));
+//    ldm_free(a->tmpv[1], sizeof(bwtintv_v));
+//	ldm_free(a->mem.a, ldm_malloc_tmp_size2 * sizeof(bwtintv_t));
+//    ldm_free(a->mem1.a, ldm_malloc_tmp_size2 * sizeof(bwtintv_t));
+//	ldm_free(a, sizeof(smem_aux_t));
 
     //global fix version
     //ldm_free(a->tmpv[0], sizeof(bwtintv_v));
@@ -2002,16 +2002,13 @@ void worker12_pre_fast(void *data, int l_pos, int r_pos, int tid, int *sam_lens,
 
     lwpf_start(l_worker1_1);
     if (!(w->opt->flag&MEM_F_PE)) {
-        fprintf("stderr", "TODO and test\n");
-        exit(0);
+        for(int sid = l_pos; sid < r_pos; sid++) {
+            int i = sid;
+            w->regs[i] = mem_align1_core(i, w->opt, w->bwt, w->bns, w->pac, w->seqs[i].l_seq, w->seqs[i].seq, w->aux[tid]);
+        }
     } else {
         for(int sid = l_pos; sid < r_pos; sid++) {
-            //int i = s_ids[sid];
             int i = sid;
-//            if(_MYID == 0) {
-//                printf("get read %d\n", i<<1|0);
-//                printf("get read %s %s\n", w->seqs[i<<1|0].name, w->seqs[i<<1|0].seq);
-//            }
             w->regs[i<<1|0] = mem_align1_core(i * 2, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|0].l_seq, w->seqs[i<<1|0].seq, w->aux[tid]);
             w->regs[i<<1|1] = mem_align1_core(i * 2 + 1, w->opt, w->bwt, w->bns, w->pac, w->seqs[i<<1|1].l_seq, w->seqs[i<<1|1].seq, w->aux[tid]);
         }
@@ -2030,22 +2027,24 @@ void worker12_pre_fast(void *data, int l_pos, int r_pos, int tid, int *sam_lens,
 
     lwpf_start(l_worker2_1);
     if (!(w->opt->flag&MEM_F_PE)) {
-        fprintf("stderr", "TODO and test\n");
-        exit(0);
-    } else {
-//        printf("range [%d, %d]\n", l_pos, r_pos);
         for(int sid = l_pos; sid < r_pos; sid++) {
-            //int i = s_ids[sid];
+            int i = sid;
+            bseq1_t tmp_seq = w->seqs[i];
+            mem_mark_primary_se(w->opt, w->regs[i].n, w->regs[i].a, w->n_processed + i);
+            if (w->opt->flag & MEM_F_PRIMARY5) mem_reorder_primary5(w->opt->T, &w->regs[i]);
+            mem_reg2sam(w->opt, w->bns, w->pac, &tmp_seq, &w->regs[i], 0, 0);
+            free(w->regs[i].a);
+            int cpe_sam_len = strlen(tmp_seq.sam);
+            cpe_sams[i] = tmp_seq.sam;
+            sam_lens[i] = cpe_sam_len;
+        }
+    } else {
+        for(int sid = l_pos; sid < r_pos; sid++) {
             int i = sid;
             bseq1_t tmp_seq[2];
             for (int id = 0; id < 2; id++) {
                 tmp_seq[id] = w->seqs[i<<1|id];
             }
-//            printf("rid %d\n", i);
-//            printf("name %s %s\n", w->seqs[i<<1|0].name, w->seqs[i<<1|1].name);
-//            printf("seq %s %s\n", w->seqs[i<<1|0].seq, w->seqs[i<<1|1].seq);
-//            printf("comment %s %s\n", w->seqs[i<<1|0].comment, w->seqs[i<<1|1].comment);
-//            printf("qual %s %s\n", w->seqs[i<<1|0].qual, w->seqs[i<<1|1].qual);
 //            mem_sam_pe(w->opt, w->bns, w->pac, w->pes, (w->n_processed>>1) + i, &w->seqs[i<<1], &w->regs[i<<1]);
             mem_sam_pe(w->opt, w->bns, w->pac, pes, (w->n_processed>>1) + i, tmp_seq, &w->regs[i<<1]);
             free(w->regs[i<<1|0].a); free(w->regs[i<<1|1].a);
@@ -2054,8 +2053,6 @@ void worker12_pre_fast(void *data, int l_pos, int r_pos, int tid, int *sam_lens,
                 cpe_sams[i<<1|id] = tmp_seq[id].sam;
                 sam_lens[i<<1|id] = cpe_sam_len;
             }
-//            printf("rid11 %d, sam len %d %d\n", i, sam_lens[i<<1|0], sam_lens[i<<1|1]);
-//            printf("sam11 %s%s\n", cpe_sams[i<<1|0], cpe_sams[i<<1|1]);
         }
     }
     lwpf_stop(l_worker2_1);
@@ -2065,21 +2062,20 @@ void worker12_fast(void *data, int l_pos, int r_pos, int tid, int *sam_lens, cha
 {
     worker_t *w = (worker_t*)data;
     if (!(w->opt->flag&MEM_F_PE)) {
-        fprintf("stderr", "TODO and test\n");
-        exit(0);
+        for(int sid = l_pos; sid < r_pos; sid++) {
+            int i = sid;
+            memcpy(w->seqs[i].sam, cpe_sams[i], sam_lens[i] * sizeof(char));
+            w->seqs[i].sam[sam_lens[i]] = '\0';
+            if(cpe_sams[i]) free(cpe_sams[i]);
+        }
     } else {
         for(int sid = l_pos; sid < r_pos; sid++) {
-            //int i = s_ids[sid];
             int i = sid;
-//            printf("rid22 %d, sam len %d %d\n", i, sam_lens[i<<1|0], sam_lens[i<<1|1]);
-//            printf("sam22 %s%s\n", cpe_sams[i<<1|0], cpe_sams[i<<1|1]);
             for(int id = 0; id < 2; id++) {
                 memcpy(w->seqs[i<<1|id].sam, cpe_sams[i<<1|id], sam_lens[i<<1|id] * sizeof(char));
                 w->seqs[i<<1|id].sam[sam_lens[i<<1|id]] = '\0';
                 if(cpe_sams[i<<1|id]) free(cpe_sams[i<<1|id]);
             }
-//            printf("rid33 %d, sam len %d %d\n", i, sam_lens[i<<1|0], sam_lens[i<<1|1]);
-//            printf("sam33 %s%s\n", w->seqs[i<<1|0].sam, w->seqs[i<<1|1].sam);
         }
     }
 }

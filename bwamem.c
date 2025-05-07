@@ -1344,9 +1344,9 @@ typedef struct{
 
 /***********************************************************/
 unsigned long segment1 = 0x00004ffff0410000;
-unsigned long segment1_len = 0x000000000039d578;
+unsigned long segment1_len = 0x00000000002b1a38;
 unsigned long segment2 = 0x0000500000004040;
-unsigned long segment2_len = 0x0000000007d65188;
+unsigned long segment2_len = 0x000000000bc43fc8;
 /***********************************************************/
 
 __uncached int cpe_is_over[cpe_num];
@@ -1358,12 +1358,12 @@ void* malloc_csr() {
     //void *dest_ = (void*)malloc(len_);
     void *dest_ = (void*)_sw_xmalloc(len_);
     void *dest = (void*)(((unsigned long)dest_ + 4095) & (~4095ul));
-    printf("csr dest %p\n", dest);
+    //printf("csr dest %p\n", dest);
     //if(mprotect(dest, (len + 4095) & (~4095ul), PROT_READ | PROT_WRITE | PROT_EXEC) == -1) {
     //    printf("mprotect fail\n");
     //    exit(0);
     //}
-    printf("csr mprotect done\n");
+    //printf("csr mprotect done\n");
     return dest;
 }
 
@@ -1374,12 +1374,12 @@ void* malloc_segments() {
     //void *dest_ = (void*)malloc(len_);
     void *dest_ = (void*)_sw_xmalloc(len_);
     void *dest = (void*)(((unsigned long)dest_ + 4095) & (~4095ul));
-    printf("segments dest %p\n", dest);
+    //printf("segments dest %p\n", dest);
     //if(mprotect(dest, (len + 4095) & (~4095ul), PROT_READ | PROT_WRITE | PROT_EXEC) == -1) {
     //    printf("mprotect fail\n");
     //    exit(0);
     //}
-    printf("segments mprotect done\n");
+    //printf("segments mprotect done\n");
     return dest;
 }
 
@@ -1392,7 +1392,7 @@ void copy_segments(void* dest) {
 }
 
 void *change_got(unsigned long gp, unsigned long old_segments, unsigned long new_segments, short *got_content, unsigned long change_size) {
-    printf("#####change got#####\n");
+    //printf("#####change got#####\n");
     for(unsigned long i = 0; i < change_size; ++i) {
         short disp = got_content[i];
 
@@ -1400,7 +1400,7 @@ void *change_got(unsigned long gp, unsigned long old_segments, unsigned long new
         unsigned long *addr1 = (unsigned long*)(gp - old_segments + new_segments + disp);
 
         unsigned long content0 = *addr0;
-        if(*addr0 != *addr1) printf("addr %p %p, content %lx %lx\n", addr0, addr1, *addr0, *addr1);
+        //if(*addr0 != *addr1) printf("addr %p %p, content %lx %lx\n", addr0, addr1, *addr0, *addr1);
         assert(content0 == *addr1);
 
         //if(content0 >= 0x580000000000)
@@ -1410,10 +1410,10 @@ void *change_got(unsigned long gp, unsigned long old_segments, unsigned long new
         unsigned long content1 = content0 - old_segments + new_segments;
         *addr1 = content1;
 
-        printf("%d -> addr0: %p, addr1: %p. content0: %p, content1:%p. disp: %d\n", i, addr0, addr1, (void*)content0, (void*)content1, disp);
+        //printf("%d -> addr0: %p, addr1: %p. content0: %p, content1:%p. disp: %d\n", i, addr0, addr1, (void*)content0, (void*)content1, disp);
     }
     asm volatile("memb\n\t":::);
-    printf("#####change got#####\n");
+    //printf("#####change got#####\n");
 }
 
 
@@ -1545,7 +1545,7 @@ void mem_process_seqs_merge(const mem_opt_t *opt, const bwt_t *bwt, const bntseq
 
         void *priv_addr = malloc_csr();
         new_segments = malloc_segments();
-        printf("new_text is %p\n", new_segments);
+        //printf("new_text is %p\n", new_segments);
 
         new_slave_fun1 = ((long)slave_worker12_s_pre_fast_cross - (long)segment1) + (long)new_segments;
         new_slave_fun2 = ((long)slave_worker12_s_fast_cross - (long)segment1) + (long)new_segments;
@@ -1553,9 +1553,9 @@ void mem_process_seqs_merge(const mem_opt_t *opt, const bwt_t *bwt, const bntseq
         //new_slave_fun2 = (long)slave_worker12_s_fast_cross;
 
 
-        printf("offset is %lu\n", (long)new_segments - segment1);
-        printf("fun1 is %p\n", (void*)new_slave_fun1);
-        printf("fun2 is %p\n", (void*)new_slave_fun2);
+        //printf("offset is %lu\n", (long)new_segments - segment1);
+        //printf("fun1 is %p\n", (void*)new_slave_fun1);
+        //printf("fun2 is %p\n", (void*)new_slave_fun2);
 
         asm volatile("mov $29, %0\n\t":"=r"(host_gp)::);
 
@@ -1566,7 +1566,7 @@ void mem_process_seqs_merge(const mem_opt_t *opt, const bwt_t *bwt, const bntseq
         para->priv_addr = priv_addr;
 
 
-        printf("gp = old %p, new %p, tag = %p, data %p\n", (void*)host_gp, (void*)para->new_gp, cpe_is_over, para->data);
+        //printf("gp = old %p, new %p, tag = %p, data %p\n", (void*)host_gp, (void*)para->new_gp, cpe_is_over, para->data);
 
         FILE *f = fopen("data.bin", "r");
         if (f == NULL) {
@@ -1577,7 +1577,7 @@ void mem_process_seqs_merge(const mem_opt_t *opt, const bwt_t *bwt, const bntseq
         unsigned long change_size;
         fread(&change_size, sizeof(unsigned long), 1, f);
         short *got_content = (short*)malloc(change_size * sizeof(short));
-        printf("got change size = %lu\n", change_size);
+        //printf("got change size = %lu\n", change_size);
         int pos = 0;
         for(unsigned long i = 0; i < change_size; ++i) {
             short disp;
@@ -1594,13 +1594,13 @@ void mem_process_seqs_merge(const mem_opt_t *opt, const bwt_t *bwt, const bntseq
         unsigned long tls_size;
         fread(&tls_size, sizeof(unsigned long), 1, f);
         unsigned long *tls_content = (unsigned long*)malloc(tls_size * sizeof(unsigned long));
-        printf("got tls size = %lu\n", tls_size);
+        //printf("got tls size = %lu\n", tls_size);
         pos = 0;
         for(unsigned long i = 0; i < tls_size; ++i) {
             unsigned long disp;
             fread(&disp, sizeof(unsigned long), 1, f);
             tls_content[pos++] = disp;
-            printf("tls contend %lx %lx\n", disp, *((unsigned long*)disp));
+            //printf("tls contend %lx %lx\n", disp, *((unsigned long*)disp));
         }
         fclose(f);
 
@@ -1610,7 +1610,7 @@ void mem_process_seqs_merge(const mem_opt_t *opt, const bwt_t *bwt, const bntseq
 
         __real_athread_spawn_cgs((void*)slave_pass_para, para, 1);
         athread_join_cgs();
-        printf("pass para done\n");
+        //printf("pass para done\n");
 
         copy_segments((void*)new_segments);
         change_got(host_gp, segment1, (unsigned long)new_segments, got_content, change_size);
@@ -1619,7 +1619,7 @@ void mem_process_seqs_merge(const mem_opt_t *opt, const bwt_t *bwt, const bntseq
         athread_join_cgs();
         athread_spawn_cgs(change_priv_segment, para);
         athread_join_cgs();
-        printf("cross time cost %.4f\n", GetTime() - cross_time_begin);
+        //printf("cross time cost %.4f\n", GetTime() - cross_time_begin);
 
     }
 #endif

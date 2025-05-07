@@ -32,7 +32,7 @@
 #include<athread.h>
 
 #ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "0.7.17-r1198-dirty"
+#define PACKAGE_VERSION "0.0.1"
 #endif
 
 int bwa_fa2pac(int argc, char *argv[]);
@@ -58,31 +58,12 @@ int main_maxk(int argc, char *argv[]);
 static int usage()
 {
 	fprintf(stderr, "\n");
-	fprintf(stderr, "Program: bwa (alignment via Burrows-Wheeler transformation)\n");
+	fprintf(stderr, "Program: SWBWA (efficient implementation of bwamem on the next-generation Sunway platform)\n");
 	fprintf(stderr, "Version: %s\n", PACKAGE_VERSION);
-	fprintf(stderr, "Contact: Heng Li <hli@ds.dfci.harvard.edu>\n\n");
-	fprintf(stderr, "Usage:   bwa <command> [options]\n\n");
+	fprintf(stderr, "Usage:   SWBWA <command> [options]\n\n");
 	fprintf(stderr, "Command: index         index sequences in the FASTA format\n");
 	fprintf(stderr, "         mem           BWA-MEM algorithm\n");
-	fprintf(stderr, "         fastmap       identify super-maximal exact matches\n");
-	fprintf(stderr, "         pemerge       merge overlapping paired ends (EXPERIMENTAL)\n");
-	fprintf(stderr, "         aln           gapped/ungapped alignment\n");
-	fprintf(stderr, "         samse         generate alignment (single ended)\n");
-	fprintf(stderr, "         sampe         generate alignment (paired ended)\n");
-	fprintf(stderr, "         bwasw         BWA-SW for long queries (DEPRECATED)\n");
 	fprintf(stderr, "\n");
-	fprintf(stderr, "         shm           manage indices in shared memory\n");
-	fprintf(stderr, "         fa2pac        convert FASTA to PAC format\n");
-	fprintf(stderr, "         pac2bwt       generate BWT from PAC\n");
-	fprintf(stderr, "         pac2bwtgen    alternative algorithm for generating BWT\n");
-	fprintf(stderr, "         bwtupdate     update .bwt to the new format\n");
-	fprintf(stderr, "         bwt2sa        generate SA from BWT and Occ\n");
-	fprintf(stderr, "\n");
-	fprintf(stderr,
-"Note: To use BWA, you need to first index the genome with `bwa index'.\n"
-"      There are three alignment algorithms in BWA: `mem', `bwasw', and\n"
-"      `aln/samse/sampe'. If you are not sure which to use, try `bwa mem'\n"
-"      first. Please `man ./bwa.1' for the manual.\n\n");
 	return 1;
 }
 
@@ -109,7 +90,7 @@ int main(int argc, char *argv[])
 	double t_real;
 	kstring_t pg = {0,0,0};
 	t_real = realtime();
-	ksprintf(&pg, "@PG\tID:bwa\tPN:bwa\tVN:%s\tCL:%s", PACKAGE_VERSION, argv[0]);
+	ksprintf(&pg, "@PG\tID:SWBWA\tPN:SWBWA\tVN:%s\tCL:%s", PACKAGE_VERSION, argv[0]);
 	for (i = 1; i < argc; ++i) ksprintf(&pg, " %s", argv[i]);
 	bwa_pg = pg.s;
 	if (argc < 2) return usage();
@@ -141,7 +122,8 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "[%s] CMD:", __func__);
 		for (i = 0; i < argc; ++i)
 			fprintf(stderr, " %s", argv[i]);
-		fprintf(stderr, "\n[%s] Real time: %.3f sec; CPU: %.3f sec\n", __func__, realtime() - t_real, cputime());
+		//fprintf(stderr, "\n[%s] Real time: %.3f sec; CPU: %.3f sec\n", __func__, realtime() - t_real, cputime());
+		fprintf(stderr, "\n");
 	}
 	free(bwa_pg);
 

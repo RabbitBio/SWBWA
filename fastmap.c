@@ -494,7 +494,7 @@ int main_mem(int argc, char *argv[])
 	if (opt->n_threads < 1) opt->n_threads = 1;
 	if (optind + 1 >= argc || optind + 3 < argc) {
 		fprintf(stderr, "\n");
-		fprintf(stderr, "Usage: bwa mem [options] <idxbase> <in1.fq> [in2.fq]\n\n");
+		fprintf(stderr, "Usage: SWBWA mem [options] <idxbase> <in1.fq> [in2.fq]\n\n");
 		fprintf(stderr, "Algorithm options:\n\n");
 		fprintf(stderr, "       -t INT        number of threads [%d]\n", opt->n_threads);
 		fprintf(stderr, "       -k INT        minimum seed length [%d]\n", opt->min_seed_len);
@@ -591,7 +591,7 @@ int main_mem(int argc, char *argv[])
 	if (aux.idx == 0) {
 		if ((aux.idx = bwa_idx_load(argv[optind], BWA_IDX_ALL)) == 0) return 1; // FIXME: memory leak
 	} else if (bwa_verbose >= 3)
-		fprintf(stderr, "[M::%s] load the bwa index from shared memory\n", __func__);
+		fprintf(stderr, "[M::%s] load the SWBWA index from shared memory\n", __func__);
 	if (ignore_alt)
 		for (i = 0; i < aux.idx->bns->n_seqs; ++i)
 			aux.idx->bns->anns[i].is_alt = 0;
@@ -780,7 +780,7 @@ int main_fastmap(int argc, char *argv[])
 	}
 	if (optind + 1 >= argc) {
 		fprintf(stderr, "\n");
-		fprintf(stderr, "Usage:   bwa fastmap [options] <idxbase> <in.fq>\n\n");
+		fprintf(stderr, "Usage:   SWBWA fastmap [options] <idxbase> <in.fq>\n\n");
 		fprintf(stderr, "Options: -l INT    min SMEM length to output [%d]\n", min_len);
 		fprintf(stderr, "         -w INT    max interval size to find coordiantes [%d]\n", min_iwidth);
 		fprintf(stderr, "         -i INT    min SMEM interval size [%d]\n", min_intv);

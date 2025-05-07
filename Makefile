@@ -1,7 +1,7 @@
 CC=		 	mpicc
 CXX= 	    mpicxx
 #CC=			clang --analyze
-CFLAGS= -w -g -Wall -Wno-unused-function -O2 -D_GNU_SOURCE  -I/home/swtest/ylf/lwpf3_cgs
+CFLAGS= -w -g -Wall -Wno-unused-function -O2 -D_GNU_SOURCE -I/home/export/online1/mdt00/shisuan/sweq/ylf/someGit/lwpf3
 #CFLAGS= -w -g -Wall -Wno-unused-function -O2 -D_GNU_SOURCE  -I/home/swtest/lwpf3
 
 #-fprofile-swperf
@@ -16,7 +16,7 @@ AOBJS=		bwashm.o bwase.o bwaseqio.o bwtgap.o bwtaln.o bamlite.o \
 			bwape.o kopen.o pemerge.o maxk.o \
 			bwtsw2_core.o bwtsw2_main.o bwtsw2_aux.o bwt_lite.o \
 			bwtsw2_chain.o fastmap.o bwtsw2_pair.o
-PROG=		bwa
+PROG=		SWBWA	
 INCLUDES=	
 LIBS= -Wl,-q -lm -lz -lpthread -lm_slave
 #-lswperf
@@ -46,7 +46,7 @@ $(SLAVE_DIR)/%.o: $(SLAVE_DIR)/%.c
 
 all:$(PROG)
 
-bwa:libbwa.a $(AOBJS) main.o $(SLAVE_OBJECTS)
+SWBWA:libbwa.a $(AOBJS) main.o $(SLAVE_OBJECTS)
 		$(CXX) -mhybrid $(CFLAGS) $(LDFLAGS) $(AOBJS) main.o $(SLAVE_OBJECTS) -o $@ -L. -lbwa $(LIBS)
 
 bwamem-lite:libbwa.a example.o
